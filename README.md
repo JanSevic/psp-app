@@ -55,9 +55,11 @@ Bez tokenu web funguje také, jen u bodů bez shrnutí zobrazí „Shrnutí zat�
 
 | Proměnná | Výchozí | Význam |
 |---|---|---|
-| `SUMMARY_MAX_CALLS` | 200 | strop počtu volání Claude za jeden běh |
+| `SUMMARY_MAX_CALLS` | 105 | strop počtu volání Claude za jeden běh (≈ 35 % týdenního limitu předplatného) |
 | `SUMMARY_MAX_MINUTES` | 180 | časový strop shrnování za jeden běh |
 | `SUMMARY_MODEL` | `sonnet` | model pro shrnutí (`sonnet`, `haiku`, `opus`) |
+| `SUMMARY_EFFORT` | `medium` | úsilí (`claude --effort`) pro běžná jednání |
+| `SUMMARY_EFFORT_HIGH` | `high` | úsilí pro důležitá jednání: důvěra/nedůvěra, rozpočet, ústavní zákon, volba/odvolání předsedy, třetí čtení, vrácený zákon; nebo skupina nad `SUMMARY_HIGH_WORDS` (3000) slov, bod s více než `SUMMARY_HIGH_SPEAKERS` (50) řečníky, vyhrocené jednání (`SUMMARY_HIGH_HEAT` = 3 poznámky stenografů) |
 
 Každé volání shrne dávku až 8 bodů (max. ~12 000 slov). Shrnují se nejdřív
 nejnovější body, pak postupně starší až do roku 2017. Když předplatné narazí

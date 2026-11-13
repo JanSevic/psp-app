@@ -52,7 +52,7 @@ jobs:
       PSP_CACHE_DIR: ${{ github.workspace }}/cache
       PSP_STATE_DIR: ${{ github.workspace }}/state
       PSP_DIST_DIR: ${{ github.workspace }}/dist
-      SUMMARY_MAX_CALLS: ${{ inputs.max_calls || vars.SUMMARY_MAX_CALLS || '200' }}
+      SUMMARY_MAX_CALLS: ${{ inputs.max_calls || vars.SUMMARY_MAX_CALLS || '105' }}
       SUMMARY_MAX_MINUTES: ${{ vars.SUMMARY_MAX_MINUTES || '180' }}
       SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL || 'sonnet' }}
       GH_TOKEN: ${{ github.token }}

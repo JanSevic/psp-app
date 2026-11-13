@@ -365,6 +365,9 @@ def run_summaries(store: dict, pending: list[dict]) -> dict:
                 break
             todo = [batch]
             while todo:
+                if calls >= config.SUMMARY_MAX_CALLS:  # i opakování se počítají do stropu
+                    stop_reason = "dosažen strop počtu volání"
+                    break
                 b = todo.pop()
                 prompt, ids = build_prompt(b)
                 calls += 1

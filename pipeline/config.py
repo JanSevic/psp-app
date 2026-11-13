@@ -35,7 +35,8 @@ SITE_SIZE_LIMIT_MB = int(os.environ.get("SITE_SIZE_LIMIT_MB", "950"))
 
 # Shrnutí
 SUMMARY_MODEL = os.environ.get("SUMMARY_MODEL", "sonnet")
-SUMMARY_MAX_CALLS = int(os.environ.get("SUMMARY_MAX_CALLS", "200"))
+# 105 volání za noc ≈ 35 % týdenního limitu předplatného (měřeno 13. 11. 2026: ~1 % za 21 volání)
+SUMMARY_MAX_CALLS = int(os.environ.get("SUMMARY_MAX_CALLS", "105"))
 SUMMARY_MAX_MINUTES = float(os.environ.get("SUMMARY_MAX_MINUTES", "180"))
 SUMMARY_BATCH_WORDS = int(os.environ.get("SUMMARY_BATCH_WORDS", "12000"))
 SUMMARY_BATCH_GROUPS = int(os.environ.get("SUMMARY_BATCH_GROUPS", "8"))
