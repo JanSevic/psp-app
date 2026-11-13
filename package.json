@@ -1,0 +1,11 @@
+{
+  "name": "psp-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "search": "node scripts/build-search.mjs"
+  },
+  "dependencies": {
+    "pagefind": "^1.6.0"
+  }
+}

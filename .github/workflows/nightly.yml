@@ -1,0 +1,149 @@
+name: Noční zpracování a nasazení
+
+on:
+  schedule:
+    # GitHub plánuje v UTC. Půlnoc v Praze je 22:00 UTC v letním a 23:00 UTC
+    # v zimním čase – spouštíme oba časy a krok „gate“ pustí jen ten správný.
+    - cron: "0 22 * * *"
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+    inputs:
+      summaries:
+        description: "Vytvářet shrnutí přes Claude"
+        type: boolean
+        default: true
+      max_calls:
+        description: "Strop počtu volání Claude v tomto běhu"
+        default: "200"
+
+permissions:
+  contents: write # GitHub Release „state“ s uloženými shrnutími
+  pages: write
+  id-token: write
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          off=$(TZ=Europe/Prague date +%z)
+          sched="${{ github.event.schedule }}"
+          if { [ "$sched" = "0 22 * * *" ] && [ "$off" = "+0200" ]; } || { [ "$sched" = "0 23 * * *" ] && [ "$off" = "+0100" ]; }; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tento čas není půlnoc v Praze (posun $off), přeskakuji."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      PSP_CACHE_DIR: ${{ github.workspace }}/cache
+      PSP_STATE_DIR: ${{ github.workspace }}/state
+      PSP_DIST_DIR: ${{ github.workspace }}/dist
+      SUMMARY_MAX_CALLS: ${{ inputs.max_calls || vars.SUMMARY_MAX_CALLS || '200' }}
+      SUMMARY_MAX_MINUTES: ${{ vars.SUMMARY_MAX_MINUTES || '180' }}
+      SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL || 'sonnet' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Instalace závislostí
+        run: |
+          pip install -r requirements.txt
+          npm ci
+
+      - name: Obnovení cache stažených dat
+        uses: actions/cache/restore@v5
+        with:
+          path: cache
+          key: psp-cache-${{ github.run_id }}
+          restore-keys: psp-cache-
+
+      - name: Stažení uložených shrnutí
+        run: |
+          mkdir -p state
+          if gh release view state >/dev/null 2>&1; then
+            gh release download state -p summaries.jsonl.gz -D state --clobber || true
+          else
+            echo "Release 'state' zatím neexistuje – první běh."
+          fi
+
+      - name: Stažení a zpracování dat z psp.cz
+        run: python -m pipeline build
+
+      - name: Uložení cache stažených dat
+        if: always()
+        uses: actions/cache/save@v5
+        with:
+          path: cache
+          key: psp-cache-${{ github.run_id }}
+
+      - name: Instalace Claude Code
+        if: ${{ github.event_name == 'schedule' || inputs.summaries }}
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Shrnutí projevů
+        if: ${{ github.event_name == 'schedule' || inputs.summaries }}
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: python -m pipeline summarize
+
+      - name: Zápis shrnutí bez volání Claude
+        if: ${{ github.event_name != 'schedule' && !inputs.summaries }}
+        run: python -m pipeline write-sums
+
+      - name: Uložení shrnutí do GitHub Release
+        if: always()
+        run: |
+          [ -f state/summaries.jsonl.gz ] || exit 0
+          gh release view state >/dev/null 2>&1 || \
+            gh release create state --title "Stav zpracování (neměnit ručně)" \
+              --notes "Automaticky udržovaný soubor s hotovými shrnutími projevů." --prerelease
+          gh release upload state state/summaries.jsonl.gz --clobber
+
+      - name: Sestavení webu a fulltextového indexu
+        run: |
+          python -m pipeline site
+          node scripts/build-search.mjs
+          python -m pipeline check-size
+
+      - name: Statistiky parsování stenoprotokolů
+        if: always()
+        run: |
+          for f in state/work/steno-stats-*.json; do [ -f "$f" ] && echo "$f: $(cat "$f")"; done || true
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
