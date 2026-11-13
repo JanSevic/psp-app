@@ -313,13 +313,13 @@ def load_steno_meta(zip_path: Path | None) -> StenoMeta:
             {
                 "id_osoba": to_int(r["id_osoba"]),
                 "aname": to_int(r["aname"]),
-                "id_bod": to_int(r["id_bod"]),
+                "id_bod": to_int(r["id_bod"]) or None,  # 0 = mimo bod pořadu
                 "druh": to_int(r["druh"]),
             }
         )
     for r in read_from_zip(zip_path, r"^steno_bod\.unl$", COLS["steno_bod"]):
         sid, an, bid = to_int(r["id_steno"]), to_int(r["aname"]), to_int(r["id_bod"])
-        if sid is None or bid is None:
+        if sid is None or not bid:
             continue
         meta.bod_marks.setdefault(sid, []).append((an or 0, bid))
     for v in meta.rec.values():

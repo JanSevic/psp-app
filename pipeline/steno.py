@@ -13,6 +13,7 @@ chybí, použije se osoba z odkazu v textu.
 
 from __future__ import annotations
 
+import difflib
 import logging
 import re
 import zipfile
@@ -204,6 +205,8 @@ def parse_page(html: str) -> ParsedPage:
     root = lxml.html.fromstring(html)
     for bad in root.xpath("//script|//style|//noscript"):
         bad.drop_tree()
+    for br in root.iter("br"):  # „10.<br>Návrh…“ → „10. Návrh…“
+        br.tail = " " + (br.tail or "")
     container = None
     for cid in ("main-content", "body", "content"):
         found = root.xpath(f"//*[@id='{cid}']")
@@ -254,8 +257,15 @@ def parse_page(html: str) -> ParsedPage:
                 continue
             label = _norm(a.text_content())
             if label and text.startswith(label[: min(len(label), 12)]):
-                speaker = (int(m.group(1)), label)
+                speaker = (int(m.group(1)) or None, label)  # id=0 se v datech občas vyskytuje
             break
+        if speaker is None:
+            # členové vlády mají odkaz na vlada.cz místo detail.sqw; osoba se doplní z `rec`
+            first_a = next((a for a in el.iter("a") if a.get("href")), None)
+            if first_a is not None:
+                label = _norm(first_a.text_content())
+                if 3 < len(label) < 200 and text.startswith(label) and text[len(label):].lstrip().startswith(":"):
+                    speaker = (None, label)
 
         if speaker is None and _is_bold_only(el, text):
             current_heading = text
@@ -323,10 +333,28 @@ def _guess_role(label: str) -> str:
     return "chair" if low.startswith(CHAIR_PREFIXES) else "speaker"
 
 
+def _align_by_osoba(parsed: list[ParsedSpeech], recs: list[dict]) -> dict[int, dict]:
+    """Přiřazení vystoupení k záznamům `rec` podle shodné posloupnosti osob.
+
+    Stránky ze ZIPů nemají kotvy `r<aname>`, takže při různém počtu vystoupení
+    na stránce a v datech nelze párovat prostě podle pořadí.
+    """
+    if not recs or not parsed or len(recs) == len(parsed):
+        return {}
+    a = [ps.link_osoba for ps in parsed]
+    b = [r.get("id_osoba") for r in recs]
+    out = {}
+    for blk in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks():
+        for i in range(blk.size):
+            out[blk.a + i] = recs[blk.b + i]
+    return out
+
+
 def build_speeches(period: Period, pages: dict[tuple[int, int], PageRef], meta: StenoMeta) -> tuple[list[Speech], dict]:
     speeches: list[Speech] = []
     stats = {"pages": 0, "speeches": 0, "matched_rec": 0, "by_order": 0, "no_rec": 0, "osoba_mismatch": 0, "continuations": 0}
     last_in_schuze: dict[int, Speech] = {}
+    current_bod: dict[int, int] = {}
     for (sch, turn) in sorted(pages):
         try:
             html = load_page(pages[(sch, turn)])
@@ -355,6 +383,7 @@ def build_speeches(period: Period, pages: dict[tuple[int, int], PageRef], meta: 
             prev.paragraphs.extend(parsed.continuation)
             stats["continuations"] += 1
 
+        aligned = _align_by_osoba(parsed.speeches, recs)
         for k, ps in enumerate(parsed.speeches):
             r = rec_by_aname.get(ps.aname) if ps.aname is not None else None
             if r is not None:
@@ -362,19 +391,31 @@ def build_speeches(period: Period, pages: dict[tuple[int, int], PageRef], meta: 
             elif recs and len(recs) == len(parsed.speeches):
                 r = recs[k]
                 stats["by_order"] += 1
+            elif k in aligned:
+                r = aligned[k]
+                stats["by_align"] = stats.get("by_align", 0) + 1
             else:
                 stats["no_rec"] += 1
             osoba = ps.link_osoba
+            druh = r.get("druh") if r else None
             if r and r.get("id_osoba"):
                 if osoba and r["id_osoba"] != osoba:
+                    # `rec` je v turnu posunuté (chybí v něm vystoupení) – odkaz na stránce
+                    # je spolehlivější; druh patří jinému vystoupení, roli odhadneme z jmenovky
                     stats["osoba_mismatch"] += 1
-                osoba = r["id_osoba"]
+                    druh = None
+                else:
+                    osoba = r["id_osoba"]
+            # rec.id_bod bývá nevyplněné (0) i uprostřed dlouhé rozpravy. Pak platí
+            # poslední značka bodu na této stránce před vystoupením, jinak bod
+            # předchozího vystoupení téže schůze (bod pokračuje, dokud nezačne další).
             id_bod = r.get("id_bod") if r else None
-            if id_bod is None and marks:
-                an = ps.aname if ps.aname is not None else 0
-                cand = [b for a, b in marks if a <= an]
-                id_bod = cand[-1] if cand else marks[0][1]
-            druh = r.get("druh") if r else None
+            if id_bod is None:
+                an = ps.aname if ps.aname is not None else (r.get("aname") if r else None)
+                cand = [b for a, b in marks if an is not None and a <= an]
+                id_bod = cand[-1] if cand else current_bod.get(sch)
+            if id_bod is not None:
+                current_bod[sch] = id_bod
             if druh in (2, 4):
                 role = "chair"
             elif druh in (3, 5):
