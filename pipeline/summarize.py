@@ -215,8 +215,10 @@ def call_claude(prompt: str, effort: str | None = None) -> str:
         except json.JSONDecodeError:
             payload = {"is_error": True, "result": out or err}
         result = str(payload.get("result") or "")
-        for k in USAGE:
-            USAGE[k] += int((payload.get("usage") or {}).get(k) or 0)
+        for k in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
+            USAGE[k] = USAGE.get(k, 0) + int((payload.get("usage") or {}).get(k) or 0)
+        # cena v přepočtu na API (u předplatného se neplatí, ale je to měřítko spotřeby)
+        USAGE["cost_usd"] = round(USAGE.get("cost_usd", 0) + float(payload.get("total_cost_usd") or 0), 4)
         if payload.get("is_error") or proc.returncode != 0:
             msg = result or err
             # 401/403 = token, 404 = model není dostupný, 429 = limit – další volání nemají smysl
@@ -381,7 +383,12 @@ def run_summaries(store: dict, pending: list[dict]) -> dict:
                 retry = []
                 for gid, g in ids.items():
                     if gid not in res:
-                        failed += 1
+                        # model skupinu v odpovědi vynechal: jednou ji zkusit samostatně
+                        if g.get("_missing") or len(ids) == 1:
+                            failed += 1
+                            log.warning("Skupina %s chybí v odpovědi", g["key"])
+                        else:
+                            todo.append([g | {"_missing": True}])
                         continue
                     bullets = res[gid]
                     bad = bad_quotes(bullets, group_source(g))
