@@ -137,6 +137,33 @@ Seřazeno podle rizika. U každého je uvedeno, jak ho ověřit.
 9. **Podmíněné požadavky**: psp.cz posílá `ETag` / `Last-Modified` a respektuje
    `If-None-Match` / `If-Modified-Since`. Pokud ne, každou noc se stáhne všechno znovu.
 
+## 3a. Ověřeno na skutečných datech (13. 11. 2026, období 10)
+
+psp.cz je z lokálního prostředí dosažitelný. `python -m pipeline build --periods 10` proběhl
+(první běh ~10 min, další ~7 min kvůli podmíněným požadavkům na stránky z posledních 60 dní).
+Statistika: 4 548 stránek, 21 568 vystoupení; 14 537 spárováno podle kotvy, 6 145 podle pořadí,
+12 zarovnáním osob, 874 bez `rec` (poslední schůze, data ještě nedoplněná), 39 neshod osoby.
+Data období 10: 13,4 MB.
+
+- **Bod 2 (steno.zip)**: existuje, sloupce sedí. `rec.druh`: 2/4 = řídí schůzi, 3/5 = řečník
+  (3 = předseda PSP mluví jako řečník), u období ≤ 6 prázdné. **`rec.id_bod = 0` znamená
+  „nevyplněno“** (~25 % záznamů, i uprostřed rozpravy) → bod se přenáší z předchozího
+  vystoupení schůze, dokud nepřijde značka ze `steno_bod`.
+- **Bod 1 (HTML)**: web: kotva `id="r<aname>"` je přímo na odkazu na osobu uvnitř `<b>`,
+  obsah v `#main-content`. **Stránky v ZIPech nemají kotvy ani `<b>`** → párování podle pořadí,
+  při rozdílném počtu zarovnání posloupnosti osob (`_align_by_osoba`). **Členové vlády mají
+  odkaz na vlada.cz** místo `detail.sqw` → řečník se pozná podle odkazu + dvojtečky.
+  Občas odkaz `detail.sqw?id=0` (chyba v datech) → osoba neznámá. Když `rec` nesouhlasí
+  s odkazem (posunutý turn), věří se odkazu. Vzorky jsou v `tests/fixtures/steno/`.
+- **Bod 3 (ZIPy)**: `zip/index.htm` funguje i pro 2017; ZIPy pro 2025 jsou jen do 23. schůze
+  (novější se stahují po stránkách). Max. turn 651.
+- **Bod 4 (hlasování)**: `hl2025s.unl`, `hl2025h1.unl`, `zmatecne.unl` (+ `omluvy.unl`).
+  87 hlasování (bod 0) nemá název ani na psp.cz.
+- **Bod 6 (claude CLI 2.1.x)**: flagy včetně `--max-turns` a `--tools ""` přijímá, JSON má
+  `result`, `is_error`, `api_error_status` (401/403/404/429 → shrnování se zastaví).
+  Skutečné shrnutí zatím nevyzkoušeno (čeká na souhlas autora – stojí limit).
+- Zbývá: období 9 a 8, Pagefind na plných datech, kontrola webu v prohlížeči, GitHub Actions.
+
 ## 4. Další kroky (návrh pořadí)
 
 1. Ověřit body 1–5 na skutečných datech (lokálně `python -m pipeline build --periods 10`,
