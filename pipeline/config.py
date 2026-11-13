@@ -41,4 +41,4 @@ SUMMARY_BATCH_WORDS = int(os.environ.get("SUMMARY_BATCH_WORDS", "12000"))
 SUMMARY_BATCH_GROUPS = int(os.environ.get("SUMMARY_BATCH_GROUPS", "8"))
 SUMMARY_GROUP_MAX_WORDS = int(os.environ.get("SUMMARY_GROUP_MAX_WORDS", "60000"))
 SUMMARY_MIN_WORDS = int(os.environ.get("SUMMARY_MIN_WORDS", "25"))
-SUMMARY_PROMPT_VERSION = "v3"  # v2/v3: připsání tvrzení, excesy, tón, poznámky stenografů
+SUMMARY_PROMPT_VERSION = "v4"  # v4: doslovné citace, limit odrážek
