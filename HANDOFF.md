@@ -164,6 +164,31 @@ Data období 10: 13,4 MB.
   Skutečné shrnutí zatím nevyzkoušeno (čeká na souhlas autora – stojí limit).
 - Zbývá: období 9 a 8, Pagefind na plných datech, kontrola webu v prohlížeči, GitHub Actions.
 
+## 3b. Rozhodnutí a stav po 13. 11. 2026 (večer)
+
+Odsouhlaseno autorem:
+- **Shrnutí:** prompt v5 (`summarize.SYSTEM_PROMPT`): tvrzení připsaná řečníkovi, adresáti
+  otázek, excesy doslovně v uvozovkách bez zjemňování (vč. fyzických potyček, rušení pořádku,
+  výkřiků), tón jako poslední odrážka „Tón: …“ nad limit 6 odrážek, volný popis tónu.
+- **Citace:** kontrola v kódu je přísná (politika – citlivé, netolerovat jiný tvar slova).
+  Nedoslovná citace nebo chybějící tón → jedno opakování, pak uvozovky pryč + „(parafráze)“.
+- **Model a úsilí:** Sonnet, `--effort high` pro vše. Logika „důležitých jednání“
+  (`effort_for`: typ bodu A + rozsah/vyhrocenost B) zůstává pro případné snížení.
+- **Strop:** 105 volání za noc ≈ 35 % týdenního limitu (měřeno: ~1 % za 21 volání se smíšeným
+  úsilím; s high pro vše bude spotřeba vyšší – po prvních nocích porovnat `cost_usd` v
+  `summary-status.json` s `/usage`).
+- **Poznámky stenografů o osobách** (výkřiky, chování) se přiřazují osobě; shodná příjmení
+  rozhoduje kontext, jinak se nepřiřadí; odhad je na webu označen.
+
+Zjištění:
+- Parser ověřen na všech obdobích (`scripts/check_parser.py`). Období 2 (1996–98) má stránky
+  uspořádané podle bodů a chybí mu `rec` – pro případné zpracování starších projevů potřebuje
+  vlastní stahování.
+- `bod_schuze.id_typ`: 1 = 1. čtení, 2/3 = 2. čtení, 5 = 3. čtení, 13/14 = zákon vrácený
+  prezidentem/Senátem, 0 = ostatní (odvozeno z nadpisů stenoprotokolů).
+- Ne všechno je ve stenozáznamu: např. výkřik o menopauze (Ševčík, 10. období) stenografové
+  nezapsali; zachytí se jen ve shrnutích těch, kdo na něj reagovali.
+
 ## 4. Další kroky (návrh pořadí)
 
 1. Ověřit body 1–5 na skutečných datech (lokálně `python -m pipeline build --periods 10`,
