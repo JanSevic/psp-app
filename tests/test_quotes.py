@@ -17,7 +17,8 @@ def test_strip_marks_paraphrase_and_keeps_good_quotes():
     assert out == ["Tvrdí, že koalice okradla důchodce a „lžete tady“. (parafráze)"]
 
 
-def test_effort_for_important_and_batches_keep_order():
+def test_effort_for_important_and_batches_keep_order(monkeypatch):
+    monkeypatch.setattr(S.config, "SUMMARY_EFFORT", "medium")
     base = {"bod": "Vládní návrh zákona o něčem", "bod_typ": 1, "words": 500, "text": "Text."}
     assert S.effort_for(base, 10) == "medium"
     assert S.effort_for(base | {"bod_typ": 5}, 10) == "high"  # třetí čtení

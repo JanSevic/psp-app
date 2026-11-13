@@ -44,7 +44,9 @@ SUMMARY_GROUP_MAX_WORDS = int(os.environ.get("SUMMARY_GROUP_MAX_WORDS", "60000")
 SUMMARY_MIN_WORDS = int(os.environ.get("SUMMARY_MIN_WORDS", "25"))
 SUMMARY_PROMPT_VERSION = "v5"  # v5: citace jako přímá řeč, aby seděla gramatika
 # Úsilí (claude --effort): výchozí, a vyšší pro důležitá jednání (viz summarize.effort_for)
-SUMMARY_EFFORT = os.environ.get("SUMMARY_EFFORT", "medium")
+# Rozhodnutí autora 13. 11. 2026: Sonnet high pro všechna jednání. Rozlišení podle důležitosti
+# (SUMMARY_EFFORT_HIGH, effort_for) zůstává pro případ, že se výchozí úsilí zase sníží.
+SUMMARY_EFFORT = os.environ.get("SUMMARY_EFFORT", "high")
 SUMMARY_EFFORT_HIGH = os.environ.get("SUMMARY_EFFORT_HIGH", "high")
 SUMMARY_HIGH_WORDS = int(os.environ.get("SUMMARY_HIGH_WORDS", "3000"))  # dlouhá skupina
 SUMMARY_HIGH_SPEAKERS = int(os.environ.get("SUMMARY_HIGH_SPEAKERS", "50"))  # řečníků k bodu
