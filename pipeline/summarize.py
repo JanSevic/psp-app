@@ -98,6 +98,10 @@ CITACE
 - Pokud výrok nejde doslovně vložit do věty, vyber kratší doslovný úsek, nebo ho napiš
   vlastními slovy bez uvozovek (např. Tvrdí, že koalice okradla důchodce o tisíc korun.).
 - Vynechanou část uvnitř citace označ „…“.
+- Citát vkládej tak, aby věta byla gramaticky správná beze změny citovaných slov:
+  nejlépe jako přímou řeč za dvojtečkou (Koalici říká: „Celý týden nám do očí lžete.“),
+  nebo jako samostatný výraz (Označuje je slovy „jste normální zbabělci“). Nevkládej citát
+  tam, kde by věta vyžadovala jiný pád, osobu nebo číslo.
 
 OBECNĚ
 - Nic nedomýšlej a nepřidávej informace, které v textu nejsou.
@@ -167,7 +171,29 @@ def _claude_cmd() -> list[str]:
             "--system-prompt", SYSTEM_PROMPT]
 
 
-def call_claude(prompt: str) -> str:
+USAGE = {"input_tokens": 0, "output_tokens": 0}
+
+# Důležitá jednání (vyšší úsilí): A) typ bodu, B) rozsah a vyhrocenost
+IMPORTANT_TITLE_RE = re.compile(
+    r"vyslovení (ne)?důvěry|státním rozpočtu|státní rozpočet|ústavní(ho)? zákon|"
+    r"(volb[aě]|odvolání) předsed(y|kyně) Poslanecké sněmovny", re.I,
+)
+DECISIVE_TYPES = {5, 13, 14}  # bod_schuze.id_typ: třetí čtení, zákon vrácený prezidentem, Senátem
+HEAT_RE = re.compile(r"\((?=[^)]*(bouch|výkřik|pokřik|křik|napomín|k pořádku|hluk|protest|pískot))[^)]*\)", re.I)
+
+
+def effort_for(g: dict, speakers_in_bod: int) -> str:
+    important = (
+        bool(IMPORTANT_TITLE_RE.search(g.get("bod") or ""))
+        or g.get("bod_typ") in DECISIVE_TYPES
+        or g.get("words", 0) > config.SUMMARY_HIGH_WORDS
+        or speakers_in_bod > config.SUMMARY_HIGH_SPEAKERS
+        or len(HEAT_RE.findall(g.get("text") or "")) >= config.SUMMARY_HIGH_HEAT
+    )
+    return config.SUMMARY_EFFORT_HIGH if important else config.SUMMARY_EFFORT
+
+
+def call_claude(prompt: str, effort: str | None = None) -> str:
     global _TOOLS_ARGS
     variants = [_TOOLS_ARGS] if _TOOLS_ARGS is not None else [
         ["--tools", ""],
@@ -177,7 +203,7 @@ def call_claude(prompt: str) -> str:
     for extra in variants:
         with tempfile.TemporaryDirectory() as cwd:  # prázdný adresář – žádný CLAUDE.md, žádné soubory
             proc = subprocess.run(
-                _claude_cmd() + extra, input=prompt, capture_output=True, text=True, timeout=1200, cwd=cwd,
+                _claude_cmd() + (["--effort", effort] if effort else []) + extra, input=prompt, capture_output=True, text=True, timeout=1200, cwd=cwd,
             )
         out, err = proc.stdout.strip(), proc.stderr.strip()
         if proc.returncode != 0 and re.search(r"unknown option|unknown argument|error: option", err, re.I):
@@ -189,6 +215,8 @@ def call_claude(prompt: str) -> str:
         except json.JSONDecodeError:
             payload = {"is_error": True, "result": out or err}
         result = str(payload.get("result") or "")
+        for k in USAGE:
+            USAGE[k] += int((payload.get("usage") or {}).get(k) or 0)
         if payload.get("is_error") or proc.returncode != 0:
             msg = result or err
             # 401/403 = token, 404 = model není dostupný, 429 = limit – další volání nemají smysl
@@ -284,15 +312,29 @@ def build_prompt(batch: list[dict]) -> tuple[str, dict[str, dict]]:
             body += f"<vystoupeni>\n{_truncate(g['text'], config.SUMMARY_GROUP_MAX_WORDS)}\n</vystoupeni>\n"
         if g.get("notes"):
             body += "<poznamky>\n" + "\n".join(f"- {n}" for n in g["notes"]) + "\n</poznamky>\n"
-        if g.get("_fix"):
-            body += ("<oprava>V tvém předchozím shrnutí této skupiny nebyly tyto citace doslovné: "
-                     + "; ".join(f"„{q}“" for q in g["_fix"])
-                     + ". Shrň skupinu znovu a dodrž pravidla pro citace.</oprava>\n")
+        if g.get("_fix") or g.get("_fix_tone"):
+            fix = []
+            if g.get("_fix"):
+                fix.append("tyto citace nebyly doslovné: " + "; ".join(f"„{q}“" for q in g["_fix"]))
+            if g.get("_fix_tone"):
+                fix.append("chyběla závěrečná odrážka „Tón: …“")
+            body += ("<oprava>V tvém předchozím shrnutí této skupiny " + " a ".join(fix)
+                     + ". Shrň skupinu znovu a dodrž pravidla.</oprava>\n")
         parts.append(f"<skupina {head}>\n{body}</skupina>\n")
     return "\n".join(parts), ids
 
 
 def make_batches(pending: list[dict]) -> list[list[dict]]:
+    """Dávky ze skupin se stejným úsilím (g["_effort"]); dávky seřazené podle pořadí
+    své první skupiny, takže nejnovější body jdou dřív bez ohledu na úsilí."""
+    pos = {id(g): i for i, g in enumerate(pending)}
+    out = []
+    for effort in dict.fromkeys(g.get("_effort") for g in pending):
+        out += _batches([g for g in pending if g.get("_effort") == effort])
+    return sorted(out, key=lambda b: pos[id(b[0])])
+
+
+def _batches(pending: list[dict]) -> list[list[dict]]:
     batches, cur, words = [], [], 0
     for g in pending:
         w = min(g["words"], config.SUMMARY_GROUP_MAX_WORDS)
@@ -325,7 +367,7 @@ def run_summaries(store: dict, pending: list[dict]) -> dict:
                 prompt, ids = build_prompt(b)
                 calls += 1
                 try:
-                    res = parse_result(call_claude(prompt))
+                    res = parse_result(call_claude(prompt, b[0].get("_effort")))
                 except StopSummaries:
                     raise
                 except Exception as exc:  # chybný JSON apod. – zkusit po menších dávkách
@@ -343,9 +385,10 @@ def run_summaries(store: dict, pending: list[dict]) -> dict:
                         continue
                     bullets = res[gid]
                     bad = bad_quotes(bullets, group_source(g))
-                    if bad and not g.get("_fix"):
-                        # a) nedoslovné citace: jednou nechat skupinu shrnout znovu
-                        retry.append(g | {"_fix": bad})
+                    no_tone = not (bullets and bullets[-1].startswith("Tón:"))
+                    if (bad or no_tone) and not g.get("_fix") and not g.get("_fix_tone"):
+                        # a) nedoslovné citace nebo chybí tón: jednou nechat skupinu shrnout znovu
+                        retry.append(g | {"_fix": bad, "_fix_tone": no_tone})
                         continue
                     if bad:
                         # b) ani napodruhé: uvozovky odstranit, odrážku označit jako parafrázi
@@ -363,7 +406,7 @@ def run_summaries(store: dict, pending: list[dict]) -> dict:
         log.warning("Shrnování ukončeno: %s", exc)
     finally:
         save_store(store)
-    return {"volani": calls, "nova": done, "selhala": failed, "duvod_konce": stop_reason}
+    return {"volani": calls, "nova": done, "selhala": failed, "duvod_konce": stop_reason, "tokeny": dict(USAGE)}
 
 
 def summarize(dist: Path | None = None, run_llm: bool = True) -> None:
@@ -376,7 +419,13 @@ def summarize(dist: Path | None = None, run_llm: bool = True) -> None:
     for g in groups:
         if status[g["key"] + "@" + f"{g['period']}-{g['osoba']}"] == "pending" and g["hash"] not in pending_by_hash:
             pending_by_hash[g["hash"]] = g
+    speakers = defaultdict(set)
+    for g in groups:
+        if g.get("n_speaker"):
+            speakers[(g["period"], g["key"])].add(g["osoba"])
     pending = sorted(pending_by_hash.values(), key=lambda g: (g.get("datum") or ""), reverse=True)
+    for g in pending:
+        g["_effort"] = effort_for(g, len(speakers[(g["period"], g["key"])]))
     log.info("Skupin celkem %d, čeká na shrnutí %d", len(groups), len(pending))
 
     run_info = {"volani": 0, "nova": 0, "selhala": 0, "duvod_konce": "shrnování vypnuto"}
