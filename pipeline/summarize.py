@@ -131,7 +131,8 @@ def call_claude(prompt: str) -> str:
         result = str(payload.get("result") or "")
         if payload.get("is_error") or proc.returncode != 0:
             msg = result or err
-            if re.search(
+            # 401/403 = token, 404 = model není dostupný, 429 = limit – další volání nemají smysl
+            if payload.get("api_error_status") in (401, 403, 404, 429) or re.search(
                 r"usage limit|limit reached|rate.?limit|quota|overloaded|credit balance|authenticat|log ?in|invalid.*(token|api key)|oauth",
                 msg, re.I,
             ):
