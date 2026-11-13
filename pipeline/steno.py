@@ -23,7 +23,7 @@ from pathlib import Path
 
 import lxml.html
 
-from . import config, fetch
+from . import config, fetch, notes
 from .opendata import Period, StenoMeta
 
 log = logging.getLogger(__name__)
@@ -107,9 +107,12 @@ def collect_pages(period: Period, meta: StenoMeta) -> dict[tuple[int, int], Page
             continue
         try:
             with zipfile.ZipFile(path) as zf:
-                for name in zf.namelist():
+                for info in zf.infolist():
+                    name = info.filename
                     m = PAGE_RE.match(Path(name).name)
-                    if not m:
+                    # ZIP 112. schůze (2021) obsahuje tisíce prázdných souborů; prázdná
+                    # stránka se pak stáhne zvlášť, pokud ji `steno` zná
+                    if not m or info.file_size == 0:
                         continue
                     pages[(int(m.group(1)), int(m.group(2)))] = ("zip", path, name)
         except zipfile.BadZipFile:
@@ -157,6 +160,7 @@ class ParsedSpeech:
     aname: int | None
     link_osoba: int | None
     label: str
+    guess_osoba: int | None = None  # odhad podle příjmení v jmenovce (jen pro párování)
     paragraphs: list[str] = field(default_factory=list)
     heading: str | None = None
 
@@ -260,11 +264,18 @@ def parse_page(html: str) -> ParsedPage:
                 speaker = (int(m.group(1)) or None, label)  # id=0 se v datech občas vyskytuje
             break
         if speaker is None:
-            # členové vlády mají odkaz na vlada.cz místo detail.sqw; osoba se doplní z `rec`
-            first_a = next((a for a in el.iter("a") if a.get("href")), None)
+            # jmenovka bez ID osoby: členové vlády (odkaz na vlada.cz), ZIPy 2017
+            # (<a href="#">), ZIPy 2021 (<a id="r1">…</a>::); osoba se doplní z `rec`
+            first_a = next(iter(el.iter("a")), None)
             if first_a is not None:
                 label = _norm(first_a.text_content())
-                if 3 < len(label) < 200 and text.startswith(label) and text[len(label):].lstrip().startswith(":"):
+                # dvojtečka za jmenovkou, nebo uvnitř ní (období 1–3: „<a id="r1">Poslanec X:</a>“)
+                # nebo kotva řečníka bez dvojtečky (období 5–6: „<b><a name="r1">Pan X</a></b> text“)
+                if 3 < len(label) < 200 and text.startswith(label) and (
+                    label.endswith(":")
+                    or text[len(label):].lstrip().startswith(":")
+                    or (_anchor_num(first_a) is not None and len(text) > len(label))
+                ):
                     speaker = (None, label)
 
         if speaker is None and _is_bold_only(el, text):
@@ -288,7 +299,7 @@ def parse_page(html: str) -> ParsedPage:
         if speaker is not None:
             osoba, label = speaker
             rest = text[len(label):] if text.startswith(label) else text
-            rest = re.sub(r"^[\s:.\-–]+", "", rest)
+            rest = re.sub(r"^(?:[\s:\-–]|\.(?!\.))+", "", rest)  # úvodní „...“ (pokračování) zůstává
             aname = inner_anchor if inner_anchor is not None else pending_anchor
             sp = ParsedSpeech(aname=aname, link_osoba=osoba, label=label.rstrip(":"), heading=current_heading)
             if rest:
@@ -341,7 +352,7 @@ def _align_by_osoba(parsed: list[ParsedSpeech], recs: list[dict]) -> dict[int, d
     """
     if not recs or not parsed or len(recs) == len(parsed):
         return {}
-    a = [ps.link_osoba for ps in parsed]
+    a = [ps.link_osoba or ps.guess_osoba for ps in parsed]
     b = [r.get("id_osoba") for r in recs]
     out = {}
     for blk in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks():
@@ -350,11 +361,30 @@ def _align_by_osoba(parsed: list[ParsedSpeech], recs: list[dict]) -> dict[int, d
     return out
 
 
-def build_speeches(period: Period, pages: dict[tuple[int, int], PageRef], meta: StenoMeta) -> tuple[list[Speech], dict]:
+def _guess_osoby(parsed: list[ParsedSpeech], recs: list[dict], surnames: dict[int, str]) -> None:
+    """U jmenovek bez ID osoby odhadne osobu mezi osobami z `rec` téže stránky podle příjmení."""
+    cand = {r["id_osoba"]: surnames.get(r["id_osoba"]) for r in recs if r.get("id_osoba")}
+    for ps in parsed:
+        if ps.link_osoba is None:
+            hits = {o for o, sn in cand.items() if sn and ps.label.endswith(sn)}
+            ps.guess_osoba = hits.pop() if len(hits) == 1 else None
+
+
+def build_speeches(
+    period: Period, pages: dict[tuple[int, int], PageRef], meta: StenoMeta, surnames: dict[int, str] | None = None,
+    name_index=None,
+) -> tuple[list[Speech], dict]:
+    """name_index (notes.NameIndex): dohledání osoby podle jména ve jmenovce, když chybí ID i `rec`."""
     speeches: list[Speech] = []
     stats = {"pages": 0, "speeches": 0, "matched_rec": 0, "by_order": 0, "no_rec": 0, "osoba_mismatch": 0, "continuations": 0}
     last_in_schuze: dict[int, Speech] = {}
     current_bod: dict[int, int] = {}
+    # V některých obdobích (6.) má `rec.druh` všude 5 – pak roli neurčuje, bere se z jmenovky.
+    druh_ok = any(
+        r.get("druh") in (2, 3, 4)
+        for t in meta.turns.values() if t.organ_id == period.organ_id
+        for r in meta.rec.get(t.id_steno, [])
+    )
     for (sch, turn) in sorted(pages):
         try:
             html = load_page(pages[(sch, turn)])
@@ -383,6 +413,7 @@ def build_speeches(period: Period, pages: dict[tuple[int, int], PageRef], meta: 
             prev.paragraphs.extend(parsed.continuation)
             stats["continuations"] += 1
 
+        _guess_osoby(parsed.speeches, recs, surnames or {})
         aligned = _align_by_osoba(parsed.speeches, recs)
         for k, ps in enumerate(parsed.speeches):
             r = rec_by_aname.get(ps.aname) if ps.aname is not None else None
@@ -416,6 +447,12 @@ def build_speeches(period: Period, pages: dict[tuple[int, int], PageRef], meta: 
                 id_bod = cand[-1] if cand else current_bod.get(sch)
             if id_bod is not None:
                 current_bod[sch] = id_bod
+            if osoba is None and name_index is not None:
+                osoba = notes.resolve_label(name_index, ps.label)
+                if osoba is not None:
+                    stats["by_label"] = stats.get("by_label", 0) + 1
+            if not druh_ok:
+                druh = None
             if druh in (2, 4):
                 role = "chair"
             elif druh in (3, 5):

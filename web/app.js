@@ -374,7 +374,7 @@ async function renderSpeeches(el, num, d, focusKey) {
     const t = norm(st.text);
     const filtered = groups
       .map((g) => ({ ...g, speeches: st.chair ? g.speeches : g.speeches.filter((s) => s.role !== "chair") }))
-      .filter((g) => g.speeches.length && (!t || norm(g.bod).includes(t) || `${g.schuze}` === t.replace(/\D/g, "")));
+      .filter((g) => (g.speeches.length || g.poznamky?.length) && (!t || norm(g.bod).includes(t) || `${g.schuze}` === t.replace(/\D/g, "")));
     el.querySelector("#count").textContent = `${fmtNum(filtered.length)} bodů`;
     el.querySelector("#list").innerHTML = filtered.slice(0, st.limit).map(groupHTML).join("");
     el.querySelector("#more").style.display = filtered.length > st.limit ? "" : "none";
@@ -404,7 +404,23 @@ function groupHTML(g) {
     <header><span class="meta">${fmtDate(g.datum)} · ${g.schuze}. schůze${g.bod_cislo > 0 ? ` · bod ${g.bod_cislo}` : ""}</span>
     <h3>${esc(g.bod)}</h3></header>
     ${g.speeches.map(speechHTML).join("")}
+    ${g.poznamky?.length ? notesHTML(g.poznamky) : ""}
   </section>`;
+}
+
+// Poznámky stenografů o osobě zapsané během vystoupení jiných řečníků (výkřiky, chování)
+function notesHTML(notes) {
+  return `<div class="speech notes">
+    <div><span class="who">Zaznamenáno ve stenozáznamu</span>
+      <span class="meta">během vystoupení jiných řečníků</span></div>
+    <ul>${notes
+      .map(
+        (n) => `<li>(${esc(n.text)}) <span class="meta">${n.odhad ? "(přiřazeno podle kontextu) " : ""}– během vystoupení: ${esc(n.kde)}${
+          n.cas ? ", úsek od " + esc(n.cas) : ""
+        } · <a href="${esc(n.url)}" target="_blank" rel="noopener">psp.cz</a></span></li>`
+      )
+      .join("")}</ul>
+  </div>`;
 }
 
 function speechHTML(s) {
@@ -443,7 +459,7 @@ async function renderSummaries(el, num, d) {
   const draw = () => {
     const t = norm(st.text);
     const list = d.body.filter((g) => {
-      if (st.hideChair && !g.n_speaker) return false;
+      if (st.hideChair && !g.n_speaker && !g.n_pozn) return false;
       return !t || norm(g.bod).includes(t) || `${g.schuze}` === t.replace(/\D/g, "");
     });
     el.querySelector("#count").textContent = `${fmtNum(list.length)} bodů`;
@@ -457,7 +473,9 @@ async function renderSummaries(el, num, d) {
         else body = `<p class="meta">Shrnutí zatím není hotové – vytváří se postupně při nočním zpracování.</p>`;
         return `<section class="group summary"><header><span class="meta">${fmtDate(g.datum)} · ${g.schuze}. schůze${
           g.bod_cislo > 0 ? ` · bod ${g.bod_cislo}` : ""
-        } · ${g.n_speaker} ${g.n_speaker === 1 ? "vystoupení" : "vystoupení"}${g.n > g.n_speaker ? ` + ${g.n - g.n_speaker}× řízení` : ""}</span>
+        } · ${g.n_speaker} ${g.n_speaker === 1 ? "vystoupení" : "vystoupení"}${g.n > g.n_speaker ? ` + ${g.n - g.n_speaker}× řízení` : ""}${
+          g.n_pozn ? ` + ${g.n_pozn}× ve stenozáznamu` : ""
+        }</span>
           <h3>${esc(g.bod)}</h3></header>
           <div class="speech">${body}
           <div class="links"><a href="#/${num}/o/${d.id}/projevy/${encodeURIComponent(g.key)}">Plné znění</a></div></div></section>`;

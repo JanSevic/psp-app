@@ -114,7 +114,9 @@ def find_periods(people: People) -> list[Period]:
         od = to_date(org.get("od_organ"))
         if od is None:
             continue
-        periods.append(Period(num=int(m.group(1)), organ_id=oid, year=od.year, od=od, do=to_date(org.get("do_organ"))))
+        # psp.cz vede 1. období (ČNR od 6/1992, Sněmovna od 1. 1. 1993) pod rokem 1993 (hl-1993ps.zip, /eknih/1993ps/)
+        year = max(od.year, 1993)
+        periods.append(Period(num=int(m.group(1)), organ_id=oid, year=year, od=od, do=to_date(org.get("do_organ"))))
     periods.sort(key=lambda p: p.num)
     return periods
 

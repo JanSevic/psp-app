@@ -90,3 +90,14 @@ def test_missing_bod_carries_over_within_schuze():
     speeches, _ = steno.build_speeches(_period(), pages, _meta(_recs(rows), marks=[(7, 222)]))
     # do značky bodu (aname 7) platí předchozí bod, od ní nový
     assert [s.id_bod for s in speeches] == [111] * 6 + [222] * 5
+
+
+def test_old_pages_colon_inside_label():
+    p = parse("web_1996_s010010.htm")
+    assert [(s.aname, s.label) for s in p.speeches[:3]] == [
+        (1, "Poslankyně Zuzka Rujbrová"), (2, "Místopředseda PSP Jan Kasal"), (3, "Poslankyně Zdeňka Horníková"),
+    ]
+    assert p.speeches[0].paragraphs[0].startswith("...jako je zavádění")
+    p = parse("web_1993_s010010.htm")
+    assert p.speeches[0].aname == 1 and p.speeches[0].label == "Poslanec Dalibor Matulka"
+    assert p.speeches[0].paragraphs[0].startswith("Dámy a pánové")

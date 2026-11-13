@@ -23,7 +23,7 @@ from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import config, opendata, steno
+from . import config, notes, opendata, steno
 from .opendata import Period, People
 from .unl import to_date, to_int
 
@@ -195,7 +195,11 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
     steno_stats = None
     if period.has_speeches:
         pages = steno.collect_pages(period, steno_meta)
-        speeches, steno_stats = steno.build_speeches(period, pages, steno_meta)
+        speeches, steno_stats = steno.build_speeches(
+            period, pages, steno_meta, {oid: (o.get("prijmeni") or "").strip() for oid, o in people.osoby.items()},
+            notes.NameIndex({oid: ((o.get("jmeno") or "").strip(), (o.get("prijmeni") or "").strip())
+                             for oid, o in people.osoby.items()}),
+        )
         log.info("Projevy %s: %s", period.year, steno_stats)
 
     sch_dates: dict[int, date] = {}
@@ -211,8 +215,49 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
         if sp.id_osoba is not None:
             by_osoba[sp.id_osoba].append(sp)
 
+    # Poznámky stenografů o osobách (výkřiky, chování) uvnitř cizích vystoupení
+    note_names = {
+        oid: ((people.osoby[oid].get("jmeno") or "").strip(), (people.osoby[oid].get("prijmeni") or "").strip())
+        for oid in set(deputy_rows) | set(by_osoba) if oid in people.osoby
+    }
+    name_index = notes.NameIndex(note_names)
+    notes_by_osoba: dict[int, list[tuple[steno.Speech, str, bool]]] = defaultdict(list)
+    note_stats = Counter()
+    speakers_at: dict[tuple[int, int], set[int]] = defaultdict(set)
+    for sp in speeches:
+        if sp.id_osoba:
+            speakers_at[(sp.schuze, sp.turn)].add(sp.id_osoba)
+    found = [(sp, i, text, tokens, name_index.resolve(tokens))
+             for sp in speeches for i, text, tokens in notes.find_notes(sp.paragraphs)]
+    resolved_at: dict[tuple[int, int], set[int]] = defaultdict(set)
+    for sp, _, _, _, oid in found:
+        if oid is not None:
+            resolved_at[(sp.schuze, sp.turn)].add(oid)
+    for sp, i, text, tokens, oid in found:
+        guessed = False
+        if oid is None:
+            cand = name_index.candidates(tokens)
+            if len(cand) > 1:
+                near = lambda m, r: set().union(*(m.get((sp.schuze, sp.turn + d), set()) for d in r))
+                oid, how = notes.disambiguate(
+                    cand, note_names, " ".join(sp.paragraphs[max(0, i - 2): i + 3]),
+                    near(speakers_at, (-1, 0, 1)), near(resolved_at, range(-3, 4)),
+                )
+                if oid is not None:
+                    guessed = True
+                    note_stats[f"odhad_{how}"] += 1
+        if oid is None:
+            note_stats["nepřiřazené"] += 1
+        elif oid == sp.id_osoba:
+            note_stats["o_recnikovi"] += 1  # zůstává v textu jeho vystoupení
+        else:
+            note_stats["prirazene"] += 1
+            notes_by_osoba[oid].append((sp, text, guessed))
+    if speeches:
+        log.info("Poznámky stenografů %s: %s", period.year, dict(note_stats))
+
     # --- Osoby
-    osoby_ids = set(deputy_rows) | set(by_osoba)
+    osoby_ids = set(deputy_rows) | set(by_osoba) | set(notes_by_osoba)
     people_list = []
     group_rows = []
     search_rows = []
@@ -257,6 +302,21 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
             if sp.datum and (g["datum"] is None or sp.datum < g["datum"]):
                 g["datum"] = sp.datum
             g["speeches"].append(sp)
+        for host, text, guessed in notes_by_osoba.get(osoba, []):
+            key = f"{host.schuze}-{bod_key(host)}"
+            g = groups.get(key)
+            if g is None:
+                b = bods.get(host.id_bod) if host.id_bod is not None else None
+                g = groups[key] = {
+                    "key": key,
+                    "schuze": host.schuze,
+                    "id_bod": host.id_bod,
+                    "bod_cislo": to_int(b.get("bod")) if b else None,
+                    "bod": opendata.bod_title(b) or host.heading or "Bez určeného bodu",
+                    "datum": host.datum,
+                    "speeches": [],
+                }
+            g.setdefault("notes", []).append((host, text, guessed))
         glist = sorted(groups.values(), key=lambda g: (g["datum"] or sch_dates.get(g["schuze"]) or date.min, g["schuze"]), reverse=True)
 
         n_speaker = sum(1 for s in sp_list if s.role == "speaker")
@@ -281,10 +341,24 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
                         "text": s.paragraphs,
                     }
                 )
-            speech_groups_out.append({k: g[k] for k in ("key", "schuze", "id_bod", "bod_cislo", "bod", "datum")} | {"speeches": sp_out})
+            g_notes = g.get("notes", [])
+            notes_out = [
+                {"text": text, "kde": host.label, "datum": host.datum, "cas": host.cas,
+                 "url": steno.page_url(period, host.schuze, host.turn, host.aname)}
+                | ({"odhad": 1} if guessed else {})
+                for host, text, guessed in g_notes
+            ]
+            speech_groups_out.append(
+                {k: g[k] for k in ("key", "schuze", "id_bod", "bod_cislo", "bod", "datum")}
+                | {"speeches": sp_out} | ({"poznamky": notes_out} if notes_out else {})
+            )
             spk = [s for s in g["speeches"] if s.role == "speaker"]
             spk_text = "\n\n".join("\n".join(s.paragraphs) for s in spk)
-            gwords = sum(s.words for s in spk)
+            notes_in = [f"[během vystoupení: {host.label}] {text}" for host, text, _ in g_notes]
+            gwords = sum(s.words for s in spk) + sum(len(t.split()) for _, t, _ in g_notes)
+            labels_g = Counter(s.label for s in spk)
+            g_funkce = _function_from_label(labels_g.most_common(1)[0][0], name) if labels_g else funkce
+            hash_src = spk_text + ("\n\n#poznamky\n" + "\n".join(notes_in) if notes_in else "")
             group_index.append(
                 {
                     "key": g["key"],
@@ -294,6 +368,7 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
                     "datum": g["datum"],
                     "n": len(g["speeches"]),
                     "n_speaker": len(spk),
+                    "n_pozn": len(g_notes),
                     "words": gwords,
                 }
             )
@@ -307,11 +382,13 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
                     "datum": g["datum"],
                     "words": gwords,
                     "n_speaker": len(spk),
-                    "hash": text_hash(spk_text) if spk_text else None,
+                    "funkce": g_funkce,
+                    "hash": text_hash(hash_src) if hash_src else None,
                     "text": spk_text,
+                    "notes": notes_in,
                 }
             )
-            full_text = "\n\n".join("\n".join(s.paragraphs) for s in g["speeches"])
+            full_text = "\n\n".join(["\n".join(s.paragraphs) for s in g["speeches"]] + [t for _, t, _ in g_notes])
             if full_text.strip():
                 search_rows.append(
                     {
