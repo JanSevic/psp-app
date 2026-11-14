@@ -71,6 +71,9 @@ SUMMARY_BATCH_WORDS = int(os.environ.get("SUMMARY_BATCH_WORDS", "12000"))
 SUMMARY_BATCH_GROUPS = int(os.environ.get("SUMMARY_BATCH_GROUPS", "8"))
 SUMMARY_GROUP_MAX_WORDS = int(os.environ.get("SUMMARY_GROUP_MAX_WORDS", "60000"))
 SUMMARY_MIN_WORDS = int(os.environ.get("SUMMARY_MIN_WORDS", "25"))
+# Shrnovat jen uzavřené schůze: psp.cz k nim už zveřejnilo `rec` (osoby a body)
+# a od posledního dne schůze uplynulo aspoň tolik dní (psp.cz data doplňuje se zpožděním).
+SUMMARY_MIN_AGE_DAYS = int(os.environ.get("SUMMARY_MIN_AGE_DAYS", "14"))
 SUMMARY_PROMPT_VERSION = "v5"  # v5: citace jako přímá řeč, aby seděla gramatika
 # Úsilí (claude --effort): výchozí, a vyšší pro důležitá jednání (viz summarize.effort_for)
 # Rozhodnutí autora 13. 11. 2026: Sonnet high pro všechna jednání. Rozlišení podle důležitosti

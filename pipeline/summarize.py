@@ -426,9 +426,15 @@ def summarize(dist: Path | None = None, run_llm: bool = True) -> None:
     status = {g["key"] + "@" + f"{g['period']}-{g['osoba']}": classify(g, store) for g in groups}
 
     pending_by_hash: dict[str, dict] = {}
+    waiting = set()
     for g in groups:
-        if status[g["key"] + "@" + f"{g['period']}-{g['osoba']}"] == "pending" and g["hash"] not in pending_by_hash:
+        if status[g["key"] + "@" + f"{g['period']}-{g['osoba']}"] != "pending":
+            continue
+        if not g.get("uzavreno", True):  # neuzavřená schůze: data se ještě mohou změnit
+            waiting.add(g["hash"])
+        elif g["hash"] not in pending_by_hash:
             pending_by_hash[g["hash"]] = g
+    waiting -= set(pending_by_hash)
     speakers = defaultdict(set)
     for g in groups:
         if g.get("n_speaker"):
@@ -436,7 +442,7 @@ def summarize(dist: Path | None = None, run_llm: bool = True) -> None:
     pending = sorted(pending_by_hash.values(), key=lambda g: (g.get("datum") or ""), reverse=True)
     for g in pending:
         g["_effort"] = effort_for(g, len(speakers[(g["period"], g["key"])]))
-    log.info("Skupin celkem %d, čeká na shrnutí %d", len(groups), len(pending))
+    log.info("Skupin celkem %d, čeká na shrnutí %d, čeká na uzavření schůze %d", len(groups), len(pending), len(waiting))
 
     run_info = {"volani": 0, "nova": 0, "selhala": 0, "duvod_konce": "shrnování vypnuto"}
     if run_llm and pending:

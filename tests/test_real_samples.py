@@ -135,3 +135,21 @@ def test_old_pages_colon_inside_label():
     p = parse("web_1993_s010010.htm")
     assert p.speeches[0].aname == 1 and p.speeches[0].label == "Poslanec Dalibor Matulka"
     assert p.speeches[0].paragraphs[0].startswith("Dámy a pánové")
+
+
+def test_ready_schuze_needs_rec_and_age():
+    """Shrnovat jen schůze s úplnými `rec` a dostatečně staré."""
+    from datetime import date
+    from pipeline.build_data import ready_schuze
+
+    turns = {
+        1: StenoTurn(1, 174, 1, 1, date(2026, 1, 10), 1, 0),
+        2: StenoTurn(2, 174, 1, 2, date(2026, 1, 11), 1, 0),
+        3: StenoTurn(3, 174, 2, 1, date(2026, 2, 1), 1, 0),  # schůze bez rec
+        5: StenoTurn(5, 174, 1, 3, date(2026, 1, 11), 1, 0),  # jednotlivý turn bez rec nevadí
+        4: StenoTurn(4, 174, 3, 1, date(2026, 2, 20), 1, 0),  # příliš nová
+    }
+    rec = {1: [{}], 2: [{}], 4: [{}]}
+    meta = StenoMeta(turns=turns, by_key={}, rec=rec, bod_marks={})
+    ready, why = ready_schuze(meta, 174, date(2026, 3, 1), 14)
+    assert ready == {1} and why == {"chybí rec": 1, "příliš nová": 1}

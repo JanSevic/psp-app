@@ -224,6 +224,29 @@ def group_title(b: dict | None, sp: steno.Speech, bod_heading: dict[int, str]) -
     return sp.heading or MIMO_BOD
 
 
+def ready_schuze(meta, organ_id: int, today: date, min_age: int) -> tuple[set[int], dict[str, int]]:
+    """Schůze, jejichž vystoupení se smí shrnout: psp.cz už ke schůzi zveřejnilo `rec`
+    (osoby a body vystoupení) a poslední den schůze je aspoň `min_age` dní starý.
+
+    Úplnost `rec` po stránkách podmínkou být nemůže: i staré schůze mají část stránek bez
+    záznamů natrvalo (ověřeno 14. 11. 2026 – 92 ze 119 schůzí 8. období). Čerstvě skončená
+    schůze ale `rec` nemá vůbec (36. schůze 10. období). Vrací (schůze, počty důvodů)."""
+    turns: dict[int, list] = defaultdict(list)
+    for t in meta.turns.values():
+        if t.organ_id == organ_id:
+            turns[t.schuze].append(t)
+    ready, why = set(), Counter()
+    for sch, ts in turns.items():
+        last = max((t.datum for t in ts if t.datum), default=None)
+        if not any(meta.rec.get(t.id_steno) for t in ts):
+            why["chybí rec"] += 1
+        elif last is None or (today - last).days < min_age:
+            why["příliš nová"] += 1
+        else:
+            ready.add(sch)
+    return ready, dict(why)
+
+
 def bod_key(sp: steno.Speech) -> str:
     if sp.id_bod is not None:
         return f"b{sp.id_bod}"
@@ -319,6 +342,10 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
     for sp in speeches:
         if sp.id_bod is not None and sp.id_bod not in bods and sp.heading:
             bod_heading.setdefault(sp.id_bod, sp.heading)
+
+    ready, why = ready_schuze(steno_meta, period.organ_id, date.today(), config.SUMMARY_MIN_AGE_DAYS)
+    if why:
+        log.info("Schůze zatím neuzavřené pro shrnutí: %s", why)
 
     by_osoba: dict[int, list[steno.Speech]] = defaultdict(list)
     for sp in speeches:
@@ -497,6 +524,7 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
                     "funkce": g_funkce,
                     "bod_typ": g["bod_typ"],
                     "hash": text_hash(hash_src) if hash_src else None,
+                    "uzavreno": g["schuze"] in ready,
                     "text": spk_text,
                     "notes": notes_in,
                 }

@@ -271,8 +271,13 @@ Zjištěno, neřešeno (ke zvážení s autorem):
   proto vráceno; správnost obou variant neověřena.
 - Shrnutí se cachují jen podle textu, ne podle názvu bodu. Když se změní jen přiřazení bodu
   (text skupiny stejný), zůstane shrnutí vytvořené s původním názvem bodu.
-- Shrnování jde od nejnovějších schůzí, u kterých psp.cz ještě nemusí mít úplná data
-  (`rec`); po doplnění se skupiny změní a shrnou znovu.
+- Shrnování šlo od nejnovějších schůzí, u kterých psp.cz ještě nemusí mít úplná data.
+  Vyřešeno (rozhodnutí autora 14. 11. 2026): shrnují se jen schůze, které už mají v `rec`
+  záznamy a skončily aspoň před `SUMMARY_MIN_AGE_DAYS` (14) dny. Úplnost `rec` po stránkách
+  podmínkou být nemůže – i staré schůze mají část stránek bez `rec` natrvalo (8. období:
+  92 ze 119 schůzí, 10. schůze 10. období 125 z 306 stránek). Neověřeno: zda psp.cz u
+  čerstvých schůzí doplňuje `rec` postupně (např. 34. schůze 10. období 8 dní po konci:
+  134 z 651 stránek bez `rec`) – sledovat řádek „Schůze zatím neuzavřené…“ v logu.
 - `omluvy.unl` pro 9. období obsahuje každý záznam až ~2 000× (992 673 řádků, 28 573
   unikátních) – výsledek to nemění, jen log ukazuje přehnaný počet.
 

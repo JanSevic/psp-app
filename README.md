@@ -64,6 +64,7 @@ Bez tokenu web funguje také, jen u bodů bez shrnutí zobrazí „Shrnutí zat�
 | Proměnná | Výchozí | Význam |
 |---|---|---|
 | `SUMMARY_MAX_CALLS` | 105 | strop počtu volání Claude za jeden běh (≈ 35 % týdenního limitu předplatného) |
+| `SUMMARY_MIN_AGE_DAYS` | 14 | shrnují se jen schůze, ke kterým psp.cz už zveřejnilo `rec` (osoby a body vystoupení) a které skončily aspoň před tolika dny – data čerstvých schůzí se ještě mění a shrnutí by se dělala dvakrát |
 | `SUMMARY_MAX_MINUTES` | 180 | časový strop shrnování za jeden běh |
 | `SUMMARY_MODEL` | `sonnet` | model pro shrnutí (`sonnet`, `haiku`, `opus`) |
 | `SUMMARY_EFFORT` | `high` | úsilí (`claude --effort`) pro běžná jednání |
