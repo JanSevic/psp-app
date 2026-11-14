@@ -74,6 +74,14 @@ def main(nums):
         show("turny ze steno.zip bez stránky v cache (podle schůze)", missing)
         print(f"  schůzí v steno.zip: {len(known_turns)}, max schůze se stránkami: {max((s for s, _ in pages), default=None)}")
 
+        # turny bez záznamů v rec (podle schůze): (turnů bez rec, turnů celkem, poslední den)
+        norec = {}
+        for t in meta.turns.values():
+            if t.organ_id == period.organ_id:
+                a, b, d = norec.get(t.schuze, (0, 0, None))
+                norec[t.schuze] = (a + (not meta.rec.get(t.id_steno)), b + 1, max(filter(None, [d, t.datum]), default=None))
+        bad = {k: v for k, v in sorted(norec.items()) if v[0]}
+        print(f"  schůze s turny bez rec: {len(bad)} z {len(norec)}: {[(k, v[0], v[1], str(v[2])) for k, v in bad.items()][:40]}")
         no_date = Counter(s.schuze for s in speeches if s.datum is None)
         show("vystoupení bez data (podle schůze)", no_date)
         no_osoba = [s for s in speeches if s.id_osoba is None]
