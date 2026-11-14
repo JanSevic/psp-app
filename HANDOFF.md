@@ -233,6 +233,9 @@ Zjištění:
   „Další období“. Lepší by byl jeden malý index osoba → období.
 - Turny neveřejných jednání se značí souborem `.404` v cache; zmizí se smazáním cache.
 - Ruční hlasování (`druh_hlasovani = R`) nemají hlasy jednotlivců a u osob se nezobrazí.
+- Workflow `web.yml` (Aktualizace vzhledu) potřebuje artefakt `site` z nočního běhu, který
+  se drží 30 dní. Pokud noční běh měsíc neproběhne úspěšně, je nutné ho nejdřív spustit.
+  Workflow sdílí skupinu `nightly`, takže čeká, dokud noční běh neskončí.
 - Ve veřejném repu GitHub po 60 dnech bez commitu vypíná plánované workflow.
 - Projevy před rokem 2017 jsou odložené (limit 1 GB). Možnosti řešení byly s autorem
   probrány: externí úložiště (např. Cloudflare R2) nebo vlastní server.

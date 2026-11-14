@@ -52,6 +52,11 @@ jen při změně (podmíněné HTTP požadavky). Hotová shrnutí se ukládají 
 3. **První běh:** Actions → *Noční zpracování a nasazení* → *Run workflow*.
    První běh stahuje všechna data a trvá déle.
 
+**Změna vzhledu:** po pushi změn ve `web/` se sám spustí workflow *Aktualizace vzhledu*
+(lze i ručně). Nic nestahuje ani neshrnuje – vezme hotový web z posledního úspěšného
+nočního běhu (artefakt `site`, drží se 30 dní), přepíše v něm soubory z `web/` a nasadí ho
+během pár minut. Další noční běh pak nasadí vše znovu, už i s novým vzhledem.
+
 Bez tokenu web funguje také, jen u bodů bez shrnutí zobrazí „Shrnutí zatím není hotové“.
 
 ### Volitelné proměnné (Settings → Secrets and variables → Actions → Variables)

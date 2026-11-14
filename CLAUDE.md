@@ -55,6 +55,7 @@ scripts/build-search.mjs   Pagefind index z state/work/search-*.jsonl.gz
 web/                        statický frontend (vanilla JS, hash routing, bez build kroku)
 tests/                      pytest + fake_psp.py (napodobenina struktury psp.cz)
 .github/workflows/nightly.yml  noční běh (půlnoc Praha) + deploy na Pages
+.github/workflows/web.yml      „Aktualizace vzhledu“: push do web/ → přenasazení bez stahování dat
 .github/workflows/tests.yml    testy při pushi
 ```
 
