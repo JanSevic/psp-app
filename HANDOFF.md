@@ -257,6 +257,12 @@ Zjištění:
   na webu. Možné další kroky: dotaz na Sněmovnu, nebo porovnání se seznamem hlasování
   na pstat.sqw pro jednoho poslance (pokud ho psp.cz vypisuje).
 
+- **Spotřeba předplatného na shrnutí** (změřil autor 14. 11. 2026): jeden noční běh shrnutí
+  (`SUMMARY_MAX_CALLS` 105, sonnet, úsilí high) bere 8–9 % týdenního limitu a 96 %
+  pětihodinového (session) limitu, tedy je těsně pod stropem. Autor rozhodl nechat beze
+  změny. Kdyby bylo potřeba šetřit: méně volání za noc, střední úsilí pro krátké skupiny
+  (`effort_for` v kódu je připravené), nebo shrnovat jen obden.
+
 - `actions/cache` ukládá každou noc nový klíč s celou cache (stovky MB až GB). Zvážit
   stabilnější klíč nebo ukládat jen při změně.
 - `web/app.js` → `otherPeriods` načítá `people.json` všech období kvůli odkazům
