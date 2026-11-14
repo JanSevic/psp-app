@@ -118,7 +118,7 @@ def collect_pages(period: Period, meta: StenoMeta) -> dict[tuple[int, int], Page
         if dest.exists():
             ld = last_day.get(sch)
             recent = current and (ld is None or (today - ld).days <= config.ZIP_RECHECK_DAYS)
-            need = (recent or refresh_day) and not fetch.over_budget()
+            need = (recent or refresh_day) and not fetch.fresh(dest) and not fetch.over_budget()
         else:
             need = not fetch.over_budget()
         path = dest if dest.exists() else None
@@ -159,7 +159,7 @@ def collect_pages(period: Period, meta: StenoMeta) -> dict[tuple[int, int], Page
         dest = _cache(period) / "pages" / f"s{t.schuze:03d}{t.turn:03d}.htm"
         recent = t.datum is None or (today - t.datum).days <= config.PAGE_RECHECK_DAYS
         missing_marker = dest.with_name(dest.name + ".404")
-        if not recent:
+        if not recent or fetch.fresh(dest):
             if dest.exists():
                 pages[(t.schuze, t.turn)] = ("file", dest)
                 p_cached += 1

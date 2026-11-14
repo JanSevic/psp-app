@@ -72,3 +72,17 @@ def test_budget_exhausted_still_builds(server, tmp_path):
     assert "přeskočeno 1" in line
     assert "vyčerpán časový rozpočet" in log
     assert (tmp_path / "dist" / "data" / "periods.json").exists()
+
+
+def test_recently_fetched_not_downloaded_again(server, tmp_path):
+    """Čerstvá data (recheck okna pokrývají vše) se znovu nestahují, dokud je kopie mladší než týden."""
+    recheck = dict(PSP_ZIP_RECHECK_DAYS="100000", PSP_PAGE_RECHECK_DAYS="100000")
+
+    def line(log):
+        return next(l for l in log.splitlines() if "Období 2021:" in l and "stránek stenoprotokolů" in l)
+
+    run_build(server, tmp_path, **recheck)
+    again = line(run_build(server, tmp_path, **recheck, PSP_MIN_REFETCH_DAYS="0"))
+    assert "staženo 1, z cache 0" in again and "1 stránek zvlášť" in again
+    skipped = line(run_build(server, tmp_path, **recheck))  # výchozí 7 dní
+    assert "staženo 0, z cache 1" in skipped and "0 stránek zvlášť" in skipped

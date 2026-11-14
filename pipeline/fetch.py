@@ -153,6 +153,28 @@ def _meta_path(path: Path) -> Path:
     return path.with_name(path.name + ".meta.json")
 
 
+def fetched_days_ago(path: Path) -> float | None:
+    """Před kolika dny jsme soubor naposledy stáhli (podle .meta.json, jinak podle času souboru)."""
+    if not path.exists():
+        return None
+    ts = None
+    try:
+        raw = json.loads(_meta_path(path).read_text()).get("fetched")
+        if raw:
+            ts = datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=ZoneInfo("UTC")).timestamp()
+    except (OSError, ValueError):
+        pass
+    if ts is None:
+        ts = path.stat().st_mtime
+    return max(0.0, (time.time() - ts) / 86400)
+
+
+def fresh(path: Path) -> bool:
+    """Kopie v cache je mladší než config.MIN_REFETCH_DAYS – znovu nestahovat."""
+    age = fetched_days_ago(path)
+    return age is not None and age < config.MIN_REFETCH_DAYS
+
+
 def fetch(url: str, dest: Path, *, conditional: bool = True, retries: int = 3) -> tuple[Path | None, bool]:
     """Stáhne `url` do `dest`.
 

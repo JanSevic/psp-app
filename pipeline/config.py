@@ -45,7 +45,12 @@ USER_AGENT = os.environ.get(
 #   kromě týdenní kontroly (REFRESH_WEEKDAY) kvůli případným opravám;
 # - ZIP schůze aktuálního období se stahuje znovu, pokud schůze skončila před
 #   méně než ZIP_RECHECK_DAYS dny;
-# - jednotlivá stránka se stahuje znovu, pokud je mladší než PAGE_RECHECK_DAYS dní.
+# - jednotlivá stránka se stahuje znovu, pokud je mladší než PAGE_RECHECK_DAYS dní;
+# - v každém případě se znovu nestahuje ZIP ani stránka, kterou máme v cache
+#   staženou před méně než MIN_REFETCH_DAYS dny (kontrola nejvýš jednou za týden).
+#   Netýká se tabulek otevřených dat (hlasování, schůze, steno) – ty se kvůli
+#   novým hlasováním kontrolují každou noc.
+MIN_REFETCH_DAYS = float(os.environ.get("PSP_MIN_REFETCH_DAYS", "7"))
 ZIP_RECHECK_DAYS = int(os.environ.get("PSP_ZIP_RECHECK_DAYS", "60"))
 PAGE_RECHECK_DAYS = int(os.environ.get("PSP_PAGE_RECHECK_DAYS", "14"))
 REFRESH_WEEKDAY = int(os.environ.get("PSP_REFRESH_WEEKDAY", "6"))  # 0 = pondělí, 6 = neděle, -1 = nikdy

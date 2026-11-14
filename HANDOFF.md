@@ -233,6 +233,10 @@ Zjištění:
   „Další období“. Lepší by byl jeden malý index osoba → období.
 - Turny neveřejných jednání se značí souborem `.404` v cache; zmizí se smazáním cache.
 - Ruční hlasování (`druh_hlasovani = R`) nemají hlasy jednotlivců a u osob se nezobrazí.
+- **Nejvýš jednou za týden** (`PSP_MIN_REFETCH_DAYS`, 7): ZIP ani stránka stenoprotokolu
+  stažená před méně než týdnem se znovu nestahuje, i když spadá do okna kontrol
+  (`PSP_ZIP_RECHECK_DAYS`, `PSP_PAGE_RECHECK_DAYS`). Stáří se čte z `fetched` v `.meta.json`.
+  Tabulky otevřených dat (hl-*.zip, schuze, steno, poslanci) se kontrolují dál každou noc.
 - **Jistič výpadku** (`fetch.py`): psp.cz občas runnerům GitHubu úplně přestane navazovat
   spojení (14. 11. 2026: ~2 h ConnectTimeout, každá stránka ~1,5 min marných pokusů). Po
   `PSP_OUTAGE_FAILS` síťových chybách za sebou se na psp.cz přestane chodit, vše se vezme
