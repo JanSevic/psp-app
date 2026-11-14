@@ -110,6 +110,33 @@ def _mandates(people: People, period: Period) -> dict[int, dict]:
     return out
 
 
+def _mandate_intervals(people: People, period: Period) -> dict[int, list[tuple[date | None, date | None]]]:
+    """{id_osoba: [(od, do), …]} – všechna období mandátu v rámci volebního období."""
+    out: dict[int, list[tuple[date | None, date | None]]] = defaultdict(list)
+    for z in people.zarazeni:
+        if to_int(z.get("cl_funkce")) != 0 or to_int(z.get("id_of")) != period.organ_id:
+            continue
+        out[to_int(z.get("id_osoba"))].append((to_date(z.get("od_o")), to_date(z.get("do_o"))))
+    return out
+
+
+def mask_to_mandate(codes: str, dates: list[date | None], intervals) -> str:
+    """Kódy hlasování mimo dobu mandátu nahradí '.' (hlasování se osoby netýká).
+
+    Otevřená data obsahují u některých poslanců záznamy i z doby, kdy mandát neměli;
+    účast se má počítat jen z doby mandátu. Bez údajů o mandátu se nic nemění.
+    """
+    if not intervals:
+        return codes
+
+    def inside(d):
+        if d is None:
+            return True
+        return any((od is None or d >= od) and (do is None or d <= do) for od, do in intervals)
+
+    return "".join(ch if ch == "." or inside(dates[i]) else "." for i, ch in enumerate(codes))
+
+
 VOTE_CODES = {
     "A": "ano",
     "N": "ne",
@@ -189,6 +216,11 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
         if prev:  # jedna osoba s více id_poslanec (nemělo by nastat) – sloučit
             s = "".join(b if a == "." else a for a, b in zip(prev, s))
         codes_by_osoba[osoba] = s
+
+    vote_dates = [v.datum for v in votes]
+    intervals = _mandate_intervals(people, period)
+    for osoba in list(codes_by_osoba):
+        codes_by_osoba[osoba] = mask_to_mandate(codes_by_osoba[osoba], vote_dates, intervals.get(osoba))
 
     clubs = _memberships(people, period)
     mandates = _mandates(people, period)

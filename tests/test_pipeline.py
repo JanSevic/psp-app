@@ -178,3 +178,17 @@ def test_parse_page_bold_speaker_without_link():
     p = steno.parse_page(html)
     assert [(s.link_osoba, s.label, s.paragraphs) for s in p.speeches] == [(None, "Poslanec Jan Novák", ["Text bez odkazu."])]
     assert p.headings == ["Celý tučný nadpis"]
+
+
+def test_votes_outside_mandate_are_ignored():
+    from datetime import date
+    from pipeline.build_data import mask_to_mandate, vote_stats
+
+    dates = [date(2021, 11, 10), date(2022, 6, 1), date(2023, 3, 1), None]
+    codes = mask_to_mandate("A@@N", dates, [(date(2021, 10, 21), date(2022, 12, 31))])
+    assert codes == "A@.N"  # hlasování 1. 3. 2023 je po konci mandátu
+    assert vote_stats(codes)["ucast"] == round(100 * 2 / 3, 1)
+    assert mask_to_mandate("A@", dates[:2], None) == "A@"  # bez údajů o mandátu beze změny
+    # dva mandáty v jednom období (odchod a návrat)
+    two = [(date(2021, 10, 21), date(2021, 12, 31)), (date(2023, 1, 1), None)]
+    assert mask_to_mandate("AAA.", dates, two) == "A.A."
