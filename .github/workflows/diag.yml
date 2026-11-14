@@ -49,7 +49,7 @@ jobs:
         if: inputs.turny != ''
         env:
           PSP_CACHE_DIR: ${{ github.workspace }}/cache
-        run: python scripts/diag_turns.py ${{ inputs.rok }} ${{ inputs.organ }} ${{ inputs.turny }}
+        run: PYTHONPATH=. python scripts/diag_turns.py ${{ inputs.rok }} ${{ inputs.organ }} ${{ inputs.turny }}
       - name: Stažení posledního hotového webu
         if: inputs.osoba != ''
         run: |
