@@ -237,7 +237,8 @@ Zjištění:
 - Dřív se taková vystoupení přilepila k bodu předchozího vystoupení téže schůze (i z jiného
   dne) – shrnutí pak neodpovídala názvu bodu (nahlášeno u V. Rakušana). Nově: značka bodu
   na téže stránce → jinak bod jen tehdy, když předchozí i následující záznam s bodem mají
-  stejný bod (`infer_missing_bods`) → jinak „Bez určeného bodu“ (skupina za den).
+  stejný bod (`infer_missing_bods`) → jinak skupina za den „Mimo projednávaný bod (přednostní práva, pořad schůze,
+  procedurální vystoupení)“ (`MIMO_BOD`; autor zvolil jeden obecný název místo odhadu druhu).
 - Ověřování na reálných datech: workflow „Diagnostika dat osoby“ (`diag.yml`) – vypíše
   data osoby z hotového webu, `rec`/`steno_bod`/nadpisy stránek (`scripts/diag_turns.py`)
   nebo souhrn `--stats` do logu běhu (logy jsou čitelné přes `gh api .../jobs/<id>/logs`).

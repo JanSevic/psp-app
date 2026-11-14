@@ -137,6 +137,9 @@ def mask_to_mandate(codes: str, dates: list[date | None], intervals) -> str:
     return "".join(ch if ch == "." or inside(dates[i]) else "." for i, ch in enumerate(codes))
 
 
+# Název skupiny pro vystoupení, u nichž psp.cz neuvádí bod pořadu.
+MIMO_BOD = "Mimo projednávaný bod (přednostní práva, pořad schůze, procedurální vystoupení)"
+
 VOTE_CODES = {
     "A": "ano",
     "N": "ne",
@@ -386,7 +389,7 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
                     "id_bod": sp.id_bod,
                     "bod_cislo": to_int(b.get("bod")) if b else None,
                     "bod_typ": to_int(b.get("id_typ")) if b else None,
-                    "bod": opendata.bod_title(b) or sp.heading or "Bez určeného bodu",
+                    "bod": opendata.bod_title(b) or sp.heading or MIMO_BOD,
                     "datum": sp.datum,
                     "speeches": [],
                 }
@@ -404,7 +407,7 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
                     "id_bod": host.id_bod,
                     "bod_cislo": to_int(b.get("bod")) if b else None,
                     "bod_typ": to_int(b.get("id_typ")) if b else None,
-                    "bod": opendata.bod_title(b) or host.heading or "Bez určeného bodu",
+                    "bod": opendata.bod_title(b) or host.heading or MIMO_BOD,
                     "datum": host.datum,
                     "speeches": [],
                 }
