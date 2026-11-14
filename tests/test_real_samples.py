@@ -84,6 +84,29 @@ def test_zip_page_alignment_when_counts_differ():
     assert speeches[2].aname == 3 and speeches[4].aname == 5
 
 
+def test_label_overrides_shifted_rec_without_person_links(tmp_path):
+    """ZIPy 2021 nemají odkaz na osobu; posunuté `rec` nesmí přiřadit text jiné osobě."""
+    import re
+    from pipeline import notes
+
+    html = (FIX / "zip_2025_s001053.htm").read_bytes()
+    page = tmp_path / "s001053.htm"
+    page.write_bytes(re.sub(rb'href="[^"]*detail\.sqw[^"]*"', b'href="#"', html))
+    names = {6214: ("Věra", "Kovářová"), 6211: ("Martin", "Kolovratník"), 6105: ("Tomio", "Okamura"),
+             6178: ("Jan", "Bartošek")}
+    surnames = {o: p for o, (_, p) in names.items()}
+    # rec posunuté o jedno: každé vystoupení dostane osobu následujícího
+    rows = REC_53[1:] + REC_53[:1]
+    speeches, stats = steno.build_speeches(_period(), {(1, 53): ("file", page)}, _meta(_recs(rows)),
+                                           surnames, notes.NameIndex(names))
+    assert [s.id_osoba for s in speeches] == [6214, 6211, 6214, 6105, 6214, 6178, 6105, 6211, 6105, 6211, 6105]
+    assert stats["osoba_dle_jmenovky"] == 11
+    # jmenovka sedí – rec platí beze změny i bez odkazů
+    speeches, stats = steno.build_speeches(_period(), {(1, 53): ("file", page)}, _meta(_recs(REC_53)),
+                                           surnames, notes.NameIndex(names))
+    assert "osoba_dle_jmenovky" not in stats and speeches[6].role == "chair"
+
+
 def test_missing_bod_is_outside_agenda_item():
     """psp.cz neuvádí bod u vystoupení mimo projednávaný bod – nepřilepit k předchozímu."""
     rows = [(6214, 1, 111, 4), (6211, 2, 0, 5), (6214, 3, 0, 4)] + [(o, a, 0, d) for o, a, _, d in REC_53[3:]]

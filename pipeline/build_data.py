@@ -139,6 +139,8 @@ def mask_to_mandate(codes: str, dates: list[date | None], intervals) -> str:
 
 # Název skupiny pro vystoupení, u nichž psp.cz neuvádí bod pořadu.
 MIMO_BOD = "Mimo projednávaný bod (přednostní práva, pořad schůze, procedurální vystoupení)"
+# Bod uvedený v `rec`, který v bod_schuze chybí (typicky sloučená rozprava) a nemá nadpis.
+BEZ_NAZVU = "Bod pořadu schůze (název v otevřených datech chybí)"
 
 VOTE_CODES = {
     "A": "ano",
@@ -211,6 +213,15 @@ def _function_from_label(label: str, name: str) -> str | None:
         return f or None
     parts = label.split()
     return " ".join(parts[:-2]) or None if len(parts) > 2 else None
+
+
+def group_title(b: dict | None, sp: steno.Speech, bod_heading: dict[int, str]) -> str:
+    """Název skupiny: bod z bod_schuze, jinak nadpis ze stenoprotokolu, jinak obecný popis."""
+    if b:
+        return opendata.bod_title(b) or sp.heading or BEZ_NAZVU
+    if sp.id_bod is not None:
+        return bod_heading.get(sp.id_bod) or sp.heading or BEZ_NAZVU
+    return sp.heading or MIMO_BOD
 
 
 def bod_key(sp: steno.Speech) -> str:
@@ -303,6 +314,12 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
             if n is not None and d:
                 sch_dates[n] = d
 
+    # nadpis ze stránky pro body, které v bod_schuze chybí (sloučené rozpravy apod.)
+    bod_heading: dict[int, str] = {}
+    for sp in speeches:
+        if sp.id_bod is not None and sp.id_bod not in bods and sp.heading:
+            bod_heading.setdefault(sp.id_bod, sp.heading)
+
     by_osoba: dict[int, list[steno.Speech]] = defaultdict(list)
     for sp in speeches:
         if sp.id_osoba is not None:
@@ -389,7 +406,7 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
                     "id_bod": sp.id_bod,
                     "bod_cislo": to_int(b.get("bod")) if b else None,
                     "bod_typ": to_int(b.get("id_typ")) if b else None,
-                    "bod": opendata.bod_title(b) or sp.heading or MIMO_BOD,
+                    "bod": group_title(b, sp, bod_heading),
                     "datum": sp.datum,
                     "speeches": [],
                 }
@@ -407,7 +424,7 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
                     "id_bod": host.id_bod,
                     "bod_cislo": to_int(b.get("bod")) if b else None,
                     "bod_typ": to_int(b.get("id_typ")) if b else None,
-                    "bod": opendata.bod_title(b) or host.heading or MIMO_BOD,
+                    "bod": group_title(b, host, bod_heading),
                     "datum": host.datum,
                     "speeches": [],
                 }

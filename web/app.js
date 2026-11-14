@@ -283,7 +283,7 @@ async function renderPerson(num, id, tab, key) {
   const h = d.statistiky.hlasovani;
   const pr = d.statistiky.projevy;
   const nums = [];
-  if (h?.celkem) nums.push(["Hlasoval" + (d.pohlavi === "Z" ? "a" : ""), h.ucast == null ? "–" : h.ucast.toLocaleString("cs-CZ") + " %"], ["Hlasování", fmtNum(h.celkem)]);
+  if (h?.celkem) nums.push(["Hlasoval" + (d.pohlavi === "M" ? "" : "a"), h.ucast == null ? "–" : h.ucast.toLocaleString("cs-CZ") + " %"], ["Hlasování", fmtNum(h.celkem)]);
   if (info.has_speeches) nums.push(["Vystoupení", fmtNum(pr.vystoupeni)]);
   if (info.has_speeches && !h?.celkem) nums.push(["Body", fmtNum(pr.body)]);
   const numsHTML = nums.map(([a, b]) => `<div><div class="label">${a}</div><div class="n">${b}</div></div>`).join("");
@@ -620,7 +620,7 @@ function renderStats(el, d, info) {
     const v = voteSummary(h);
     const fmtPct = (n) =>
       (v.celkem ? (100 * n) / v.celkem : 0).toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
-    const z = d.pohlavi === "Z";
+    const z = d.pohlavi !== "M"; // psp.cz uvádí ženy jako „Ž“ (výjimečně „Z“)
     const row = (label, n, cls = "") =>
       `<tr class="${cls}"><td>${label}</td><td class="num">${fmtNum(n)}</td><td class="num">${fmtPct(n)}</td></tr>`;
     html += `<h2>Hlasování</h2>
