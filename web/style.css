@@ -100,6 +100,15 @@ tbody tr:nth-child(even) { background: var(--zebra); }
 th.sort { cursor: pointer; }
 th.sort:hover { color: var(--fg); }
 th .arrow { color: var(--accent); }
+.vstat { width: auto; margin-top: .25rem; }
+.vstat tbody tr { background: none; }
+.vstat td { padding: .5rem 0; }
+.vstat td:first-child { padding-right: 3rem; }
+.vstat td.num { padding-left: 2rem; }
+.vstat .main td { font-weight: 600; }
+.vstat .sub td:first-child { padding-left: 1rem; }
+.vstat .zt td { font-style: italic; color: var(--muted); font-size: .88rem; padding-bottom: .1rem; border-bottom: 0; }
+.vstat .gap td { border: 0; padding: .4rem 0; }
 td.num, th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 td.date { width: 8.5rem; font-variant-numeric: tabular-nums; }
 td.date .d { white-space: nowrap; }

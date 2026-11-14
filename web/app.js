@@ -618,28 +618,24 @@ function renderStats(el, d, info) {
   let html = "";
   if (h && h.celkem) {
     const v = voteSummary(h);
-    const pct = (n) => (v.celkem ? (100 * n) / v.celkem : 0);
-    const fmtPct = (n) => pct(n).toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
-    const voted = d.pohlavi === "Z" ? "Hlasovala" : "Hlasoval";
-    const row = (label, n, cls = "", sub = false) =>
-      `<tr${sub ? ' class="sub"' : ""}><td class="${cls}">${sub ? "&nbsp;&nbsp;&nbsp;" : ""}${label}</td><td class="num">${fmtNum(n)}</td>
-        <td class="num">${fmtPct(n)}</td><td style="width:45%"><div class="bar" style="width:${pct(n)}%"></div></td></tr>`;
+    const fmtPct = (n) =>
+      (v.celkem ? (100 * n) / v.celkem : 0).toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
+    const z = d.pohlavi === "Z";
+    const row = (label, n, cls = "") =>
+      `<tr class="${cls}"><td>${label}</td><td class="num">${fmtNum(n)}</td><td class="num">${fmtPct(n)}</td></tr>`;
     html += `<h2>Hlasování</h2>
-      <div class="cards">
-        <div class="card"><div class="label">${voted}</div><div class="n">${v.celkem ? fmtPct(v.hlasoval) : "–"}</div></div>
-        <div class="card"><div class="label">Hlasování během mandátu</div><div class="n">${fmtNum(v.celkem)}</div></div>
-      </div>
-      <div class="table-wrap"><table><tbody>
-        ${row(`<b>${voted}</b>`, v.hlasoval)}
-        ${row("ano", v.ano, codeClass("A"), true)}
-        ${row("ne", v.ne, codeClass("N"), true)}
-        ${row("zdržel se", v.zdrzel, codeClass("C"), true)}
-        ${row(`<b>${d.pohlavi === "Z" ? "Omluvena" : "Omluven"}</b>`, v.omluven, codeClass("M"))}
-        ${row(`<b>${d.pohlavi === "Z" ? "Nepřihlášena" : "Nepřihlášen"}</b>`, v.neprihlasen, codeClass("@"))}
-      </tbody></table></div>
-      <p class="meta">Počítáno stejně jako statistika hlasování na psp.cz: hlasování během mandátu bez zmatečných
-      hlasování a hlasování před složením slibu. „Zdržel se“ zahrnuje i přihlášené, kteří nestiskli žádné tlačítko.
-      „Omluven“ = nepřihlášen v době, na kterou se poslanec z jednání omluvil.</p>`;
+      <table class="vstat"><tbody>
+        ${row(z ? "Hlasovala" : "Hlasoval", v.hlasoval, "main")}
+        <tr class="zt"><td colspan="3">z toho</td></tr>
+        ${row("ano", v.ano, "sub")}
+        ${row("ne", v.ne, "sub")}
+        ${row(z ? "zdržela se" : "zdržel se", v.zdrzel, "sub")}
+        <tr class="gap"><td colspan="3"></td></tr>
+        ${row(z ? "Omluvena" : "Omluven", v.omluven, "main")}
+        ${row(z ? "Nepřihlášena" : "Nepřihlášen", v.neprihlasen, "main")}
+      </tbody></table>
+      <p class="meta">Z ${fmtNum(v.celkem)} hlasování během mandátu, počítáno jako na psp.cz (bez zmatečných
+      hlasování). Zdržel se zahrnuje i přihlášené, kteří nehlasovali; omluven = nepřihlášen v době omluvy.</p>`;
   }
   if (info.has_speeches) {
     html += `<h2>Projevy</h2><div class="cards">
