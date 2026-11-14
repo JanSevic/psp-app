@@ -20,7 +20,7 @@ on:
         default: true
       max_calls:
         description: "Strop počtu volání Claude v tomto běhu"
-        default: "105"
+        default: "50"
 
 permissions:
   contents: write # GitHub Release „state“ s uloženými shrnutími
