@@ -20,6 +20,9 @@ on:
       organ:
         description: "id_organ období (174 = 10. období)"
         default: "174"
+      kontrola:
+        description: "Kontrola správnosti dat pro období, např. 8 9 10 (prázdné = přeskočit)"
+        default: ""
 
 permissions:
   contents: read
@@ -39,7 +42,7 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - name: Obnovení cache stažených dat
-        if: inputs.turny != ''
+        if: inputs.turny != '' || inputs.kontrola != ''
         uses: actions/cache/restore@v5
         with:
           path: cache
@@ -51,7 +54,7 @@ jobs:
           PSP_CACHE_DIR: ${{ github.workspace }}/cache
         run: PYTHONPATH=. python scripts/diag_turns.py ${{ inputs.rok }} ${{ inputs.organ }} ${{ inputs.turny }}
       - name: Stažení posledního hotového webu
-        if: inputs.osoba != ''
+        if: inputs.osoba != '' || inputs.kontrola != ''
         run: |
           for id in $(gh run list --workflow nightly.yml --status success --limit 10 \
                         --json databaseId --jq '.[].databaseId'); do
@@ -69,3 +72,8 @@ jobs:
           f="s/${{ inputs.osoba }}.json.gz"
           echo "===== $f"; (gzip -dc "$d/$f" 2>/dev/null || cat "$d/$f" 2>/dev/null || echo "(chybí)"); echo
           echo "===== KONEC"
+      - name: Kontrola správnosti dat
+        if: inputs.kontrola != ''
+        env:
+          PSP_CACHE_DIR: ${{ github.workspace }}/cache
+        run: PYTHONPATH=. python scripts/audit.py ${{ inputs.kontrola }}
