@@ -36,7 +36,7 @@ def page_html(sch, turn):
     return None, None
 
 
-for arg in sys.argv[3:]:
+for arg in [a for a in sys.argv[3:] if not a.startswith("--")]:
     sch, turn = map(int, arg.split("-"))
     st = meta.by_key.get((organ, sch, turn))
     print(f"\n===== schůze {sch}, turn {turn}, id_steno {st.id_steno if st else None}, {st.datum if st else ''}")
@@ -53,3 +53,28 @@ for arg in sys.argv[3:]:
     print(f"  stránka ({src}), nadpisy: {p.headings}")
     for ps in p.speeches:
         print(f"  vystoupení aname={ps.aname} osoba={ps.link_osoba} '{ps.label}' nadpis={ps.heading!r}")
+
+
+# --- souhrn: jak často chybí rec.id_bod a jestli je „uvnitř“ jednoho bodu
+if "--stats" in sys.argv:
+    from collections import Counter
+    seq = {}
+    for t in meta.turns.values():
+        if t.organ_id != organ:
+            continue
+        for r in meta.rec.get(t.id_steno, []):
+            seq.setdefault(t.schuze, []).append(((t.turn, r["aname"] or 0), r["id_bod"], r["druh"]))
+    c = Counter()
+    for sch, rows in seq.items():
+        rows.sort()
+        bods = [b for _, b, _ in rows]
+        for i, (_, b, druh) in enumerate(rows):
+            if b is not None:
+                c["s bodem"] += 1
+                continue
+            prev = next((x for x in reversed(bods[:i]) if x is not None), None)
+            nxt = next((x for x in bods[i + 1:] if x is not None), None)
+            kind = "uvnitř téhož bodu" if prev is not None and prev == nxt else "mezi body / na okraji"
+            c[f"bez bodu, {kind}, {'řečník' if druh in (3, 5) else 'předsedající/jiné'}"] += 1
+    for k, v in sorted(c.items()):
+        print(f"  {k}: {v}")
