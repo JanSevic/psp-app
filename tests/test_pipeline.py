@@ -129,7 +129,12 @@ def test_votes_and_person(built):
     pred = load(dist / "data" / "9" / "o" / "100.json")
     assert pred["hlasovani"]["kody"] == "ANM"
     svob = load(dist / "data" / "9" / "o" / "102.json")
-    assert svob["statistiky"]["hlasovani"]["ucast"] == 50.0
+    assert svob["hlasovani"]["kody"] == "MN"  # @ v době omluvy → omluven
+    h = svob["statistiky"]["hlasovani"]
+    assert h["ucast"] == 50.0 and h["omluven"] == 1 and h["neprihlasen"] == 0 and h["hlasoval"] == 1
+    # zmatečné hlasování 80003 se do statistiky nepočítá
+    hn = novak["statistiky"]["hlasovani"]
+    assert hn["celkem"] == 2 and hn["ano"] == 2 and hn["zdrzel"] == 0
     people = load(dist / "data" / "9" / "people.json")
     minister = next(p for p in people if p["id"] == 200)
     assert not minister["poslanec"] and minister["funkce"] == "Ministr dopravy ČR"

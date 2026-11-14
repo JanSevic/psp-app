@@ -149,16 +149,54 @@ VOTE_CODES = {
 }
 
 
-def vote_stats(codes: str) -> dict:
-    c = Counter(ch for ch in codes if ch != ".")
-    total = sum(c.values())
-    base = total - c.get("W", 0)
-    present = sum(c.get(k, 0) for k in ("A", "N", "C", "F", "K"))
+def vote_stats(codes: str, skip: list[bool] | None = None) -> dict:
+    """Statistika hlasování jako na psp.cz (sqw/pstat.sqw).
+
+    Nepočítají se zmatečná hlasování (`skip`) ani hlasování před složením slibu (W).
+    Hlasoval = ano + ne + zdržel se; „zdržel se“ zahrnuje i přihlášené, kteří
+    nestiskli tlačítko (F, K) – stejně jako výpis hlasování na psp.cz.
+    """
+    c = Counter(ch for i, ch in enumerate(codes) if ch != "." and not (skip and skip[i]))
+    total = sum(c.values()) - c.get("W", 0)
+    zdrzel = c.get("C", 0) + c.get("F", 0) + c.get("K", 0)
+    hlasoval = c.get("A", 0) + c.get("N", 0) + zdrzel
+
+    def pct(n: int) -> float | None:
+        return round(100 * n / total, 1) if total else None
+
     return {
         "celkem": total,
+        "hlasoval": hlasoval,
+        "ano": c.get("A", 0),
+        "ne": c.get("N", 0),
+        "zdrzel": zdrzel,
+        "omluven": c.get("M", 0),
+        "neprihlasen": c.get("@", 0),
+        "ucast": pct(hlasoval),
         "pocty": dict(c),
-        "ucast": round(100 * present / base, 1) if base else None,
     }
+
+
+def _clock(v: str | None) -> str | None:
+    """'14:30', '14.30', '1900-01-01 14:30:00' -> '14:30'."""
+    m = re.search(r"(\d{1,2})[:.](\d{2})", v or "")
+    return f"{int(m.group(1)):02d}:{m.group(2)}" if m else None
+
+
+def apply_omluvy(codes: bytearray, votes: list, omluvy: list[tuple]) -> None:
+    """Nepřihlášen (@) v době omluvy → omluven (M), jako to počítá psp.cz.
+
+    `omluvy` = [(den, od, do)], od/do 'HH:MM' nebo None (celý jednací den).
+    """
+    for i, v in enumerate(votes):
+        if codes[i] != ord("@") or v.datum is None:
+            continue
+        for den, od, do in omluvy:
+            if den != v.datum:
+                continue
+            if v.cas is None or ((od is None or v.cas >= od) and (do is None or v.cas <= do)):
+                codes[i] = ord("M")
+                break
 
 
 def _function_from_label(label: str, name: str) -> str | None:
@@ -206,6 +244,23 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
     deputies = [p for p in people.poslanci if to_int(p.get("id_obdobi")) == period.organ_id]
     pid_to_osoba = {to_int(p["id_poslanec"]): to_int(p["id_osoba"]) for p in deputies}
     deputy_rows = {to_int(p["id_osoba"]): p for p in deputies}
+    omluvy: dict[int, list[tuple]] = {}
+    for r in people.omluvy:
+        if to_int(r.get("id_organ")) not in (None, period.organ_id):
+            continue
+        pid, den = to_int(r.get("id_poslanec")), to_date(r.get("den"))
+        if pid is not None and den is not None:
+            omluvy.setdefault(pid, []).append((den, _clock(r.get("od")), _clock(r.get("do"))))
+    n_omluv = 0
+    for pid, arr in codes_by_poslanec.items():
+        if pid in omluvy:
+            before = arr.count(b"M")
+            apply_omluvy(arr, votes, omluvy[pid])
+            n_omluv += arr.count(b"M") - before
+    if votes:
+        log.info("Omluvy: %d záznamů, %d hlasování přeznačeno nepřihlášen → omluven", sum(map(len, omluvy.values())), n_omluv)
+    zm_mask = [v.zmatecne for v in votes]
+
     codes_by_osoba: dict[int, str] = {}
     for pid, arr in codes_by_poslanec.items():
         osoba = pid_to_osoba.get(pid)
@@ -316,7 +371,7 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
         codes = codes_by_osoba.get(osoba, "")
         first = next((i for i, ch in enumerate(codes) if ch != "."), None)
         last = next((i for i in range(len(codes) - 1, -1, -1) if codes[i] != "."), None)
-        vstats = vote_stats(codes) if codes else None
+        vstats = vote_stats(codes, zm_mask) if codes else None
 
         # skupiny projevů podle schůze a bodu
         groups: dict[str, dict] = {}

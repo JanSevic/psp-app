@@ -50,7 +50,11 @@ Moje návrhy, které autor schválil („ano, pusť se do toho“):
   strop 200 volání a 180 minut za běh;
 - velmi dlouhé skupiny (>60 000 slov) se pro shrnutí zkracují;
 - úvodní stránka má záložky Poslanci / Ostatní řečníci / Hledat v projevech;
-- účast = přítomen (A, N, C, F, K) / všechna hlasování během mandátu kromě W.
+- statistika hlasování jako na psp.cz (`sqw/pstat.sqw`): Hlasoval = A + N + zdržel se (C, F, K);
+  Omluven = M; Nepřihlášen = @; základ = hlasování během mandátu bez zmatečných a bez W.
+  Kódy `@` v době omluvy z tabulky `omluvy` (poslanci.zip: id_organ, id_poslanec, den, od, do;
+  prázdné od/do = celý den) se přeznačí na `M` – otevřená data u omluvených uvádějí `@`.
+  Formát časů od/do v reálných datech neověřen (parser bere HH:MM i HH.MM), viz log „Omluvy: …“.
 
 ## 2. Architektura v kostce
 

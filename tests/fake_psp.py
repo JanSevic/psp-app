@@ -88,6 +88,8 @@ def build(root: Path) -> None:
                 "osoby.unl": unl(osoby),
                 "poslanec.unl": unl(poslanec),
                 "zarazeni.unl": unl(zarazeni),
+                # Svobodová omluvena 10. 11. 2021 10:00–10:20 → hlasování 80001 (10:15) je „omluven“
+                "omluvy.unl": unl([[173, 9102, "10.11.2021", "10:00", "10:20"], [173, 9100, "12.01.2022", None, None]]),
             }
         )
     )

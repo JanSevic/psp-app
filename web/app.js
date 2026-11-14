@@ -192,7 +192,7 @@ async function renderPeriod(num, tab, q) {
     <p class="meta count" id="f-count"></p>
     <div class="table-wrap"><table><thead><tr>
       <th class="sort" data-k="sort">Jméno</th>
-      ${deputies ? `<th class="sort" data-k="klub">Klub</th><th class="sort hide-sm" data-k="kraj">Kraj</th><th class="sort num" data-k="ucast">Účast</th>` : `<th class="sort" data-k="funkce">Funkce</th>`}
+      ${deputies ? `<th class="sort" data-k="klub">Klub</th><th class="sort hide-sm" data-k="kraj">Kraj</th><th class="sort num" data-k="ucast">Hlasoval</th>` : `<th class="sort" data-k="funkce">Funkce</th>`}
       ${info.has_speeches ? `<th class="sort num" data-k="vystoupeni">Vystoupení</th>` : ""}
     </tr></thead><tbody id="rows"></tbody></table></div>`;
 
@@ -283,7 +283,7 @@ async function renderPerson(num, id, tab, key) {
   const h = d.statistiky.hlasovani;
   const pr = d.statistiky.projevy;
   const nums = [];
-  if (h?.celkem) nums.push(["Účast", h.ucast == null ? "–" : h.ucast.toLocaleString("cs-CZ") + " %"], ["Hlasování", fmtNum(h.celkem)]);
+  if (h?.celkem) nums.push(["Hlasoval" + (d.pohlavi === "Z" ? "a" : ""), h.ucast == null ? "–" : h.ucast.toLocaleString("cs-CZ") + " %"], ["Hlasování", fmtNum(h.celkem)]);
   if (info.has_speeches) nums.push(["Vystoupení", fmtNum(pr.vystoupeni)]);
   if (info.has_speeches && !h?.celkem) nums.push(["Body", fmtNum(pr.body)]);
   const numsHTML = nums.map(([a, b]) => `<div><div class="label">${a}</div><div class="n">${b}</div></div>`).join("");
@@ -603,28 +603,43 @@ async function renderSummaries(el, num, d) {
 
 // ---------------------------------------------------------------- statistiky
 
+/** Souhrn hlasování; starší data bez nových polí dopočítá z kódů. */
+function voteSummary(h) {
+  if (h.hlasoval != null) return h;
+  const c = h.pocty || {};
+  const g = (k) => c[k] || 0;
+  const zdrzel = g("C") + g("F") + g("K");
+  return { celkem: h.celkem - g("W"), ano: g("A"), ne: g("N"), zdrzel, hlasoval: g("A") + g("N") + zdrzel, omluven: g("M"), neprihlasen: g("@") };
+}
+
 function renderStats(el, d, info) {
   const h = d.statistiky.hlasovani;
   const p = d.statistiky.projevy;
   let html = "";
   if (h && h.celkem) {
-    const order = ["A", "N", "C", "F", "K", "@", "M", "W"];
-    const max = Math.max(...Object.values(h.pocty));
+    const v = voteSummary(h);
+    const pct = (n) => (v.celkem ? (100 * n) / v.celkem : 0);
+    const fmtPct = (n) => pct(n).toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
+    const voted = d.pohlavi === "Z" ? "Hlasovala" : "Hlasoval";
+    const row = (label, n, cls = "", sub = false) =>
+      `<tr${sub ? ' class="sub"' : ""}><td class="${cls}">${sub ? "&nbsp;&nbsp;&nbsp;" : ""}${label}</td><td class="num">${fmtNum(n)}</td>
+        <td class="num">${fmtPct(n)}</td><td style="width:45%"><div class="bar" style="width:${pct(n)}%"></div></td></tr>`;
     html += `<h2>Hlasování</h2>
       <div class="cards">
-        <div class="card"><div class="label">Účast</div><div class="n">${h.ucast == null ? "–" : h.ucast.toLocaleString("cs-CZ") + " %"}</div></div>
-        <div class="card"><div class="label">Hlasování během mandátu</div><div class="n">${fmtNum(h.celkem)}</div></div>
+        <div class="card"><div class="label">${voted}</div><div class="n">${v.celkem ? fmtPct(v.hlasoval) : "–"}</div></div>
+        <div class="card"><div class="label">Hlasování během mandátu</div><div class="n">${fmtNum(v.celkem)}</div></div>
       </div>
-      <div class="table-wrap"><table><tbody>${order
-        .filter((c) => h.pocty[c])
-        .map(
-          (c) => `<tr><td class="${codeClass(c)}">${esc(voteLabel(c))}</td><td class="num">${fmtNum(h.pocty[c])}</td>
-          <td class="num">${((100 * h.pocty[c]) / h.celkem).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} %</td>
-          <td style="width:45%"><div class="bar" style="width:${(100 * h.pocty[c]) / max}%"></div></td></tr>`
-        )
-        .join("")}</tbody></table></div>
-      <p class="meta">Účast = podíl hlasování, kdy byl(a) přihlášen(a) (ano, ne, zdržel se, nehlasoval), ze všech hlasování během mandátu
-      kromě hlasování před složením slibu.</p>`;
+      <div class="table-wrap"><table><tbody>
+        ${row(`<b>${voted}</b>`, v.hlasoval)}
+        ${row("ano", v.ano, codeClass("A"), true)}
+        ${row("ne", v.ne, codeClass("N"), true)}
+        ${row("zdržel se", v.zdrzel, codeClass("C"), true)}
+        ${row(`<b>${d.pohlavi === "Z" ? "Omluvena" : "Omluven"}</b>`, v.omluven, codeClass("M"))}
+        ${row(`<b>${d.pohlavi === "Z" ? "Nepřihlášena" : "Nepřihlášen"}</b>`, v.neprihlasen, codeClass("@"))}
+      </tbody></table></div>
+      <p class="meta">Počítáno stejně jako statistika hlasování na psp.cz: hlasování během mandátu bez zmatečných
+      hlasování a hlasování před složením slibu. „Zdržel se“ zahrnuje i přihlášené, kteří nestiskli žádné tlačítko.
+      „Omluven“ = nepřihlášen v době, na kterou se poslanec z jednání omluvil.</p>`;
   }
   if (info.has_speeches) {
     html += `<h2>Projevy</h2><div class="cards">

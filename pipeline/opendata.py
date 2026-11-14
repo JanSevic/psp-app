@@ -31,6 +31,8 @@ COLS = {
         "nehlasoval", "prihlaseno", "kvorum", "druh_hlasovani", "vysledek", "nazev_dlouhy", "nazev_kratky",
     ],
     "zmatecne": ["id_hlasovani"],
+    # omluvy poslanců z jednání Sněmovny; od/do prázdné = celý jednací den
+    "omluvy": ["id_organ", "id_poslanec", "den", "od", "do"],
     "schuze": ["id_schuze", "id_org", "schuze", "od_schuze", "do_schuze", "aktualizace", "pozvanka"],
     "bod_schuze": [
         "id_bod", "id_schuze", "id_tisk", "id_typ", "bod", "uplny_naz", "uplny_kon", "poznamka",
@@ -91,6 +93,7 @@ class People:
     organy: dict[int, dict]
     typ_organu: dict[int, dict]
     zarazeni: list[dict]
+    omluvy: list[dict] = field(default_factory=list)
     periods: list[Period] = field(default_factory=list)
 
 
@@ -105,7 +108,8 @@ def load_people(zip_path: Path) -> People:
             osoby[oid] = r
     organy = {to_int(r["id_organ"]): r for r in rows("organy") if to_int(r["id_organ"]) is not None}
     typ = {to_int(r["id_typ_org"]): r for r in rows("typ_organu") if to_int(r["id_typ_org"]) is not None}
-    people = People(osoby=osoby, poslanci=rows("poslanec"), organy=organy, typ_organu=typ, zarazeni=rows("zarazeni"))
+    people = People(osoby=osoby, poslanci=rows("poslanec"), organy=organy, typ_organu=typ, zarazeni=rows("zarazeni"),
+                    omluvy=rows("omluvy"))
     people.periods = find_periods(people)
     return people
 

@@ -8,7 +8,7 @@ Statický web, který pro každého poslance a každé volební období ukazuje:
   a bodu pořadu, s odkazem na místo v originálním stenoprotokolu na psp.cz.
 - **Shrnutí** – ke každému bodu pořadu několik odrážek s tím, co osoba řekla
   (vytváří Claude), s prokliknutím na plné znění.
-- **Statistiky** – účast, rozložení hlasování, počet vystoupení.
+- **Statistiky** – hlasoval / omluven / nepřihlášen (stejně jako psp.cz), počet vystoupení.
 - **Fulltext** – hledání v projevech jedné osoby i napříč všemi řečníky.
 
 Stránku má každý, kdo ve Sněmovně promluvil (i neposlanci – ministři, hosté),
