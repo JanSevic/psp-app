@@ -182,15 +182,15 @@ def collect_pages(period: Period, meta: StenoMeta) -> dict[tuple[int, int], Page
             marker.parent.mkdir(parents=True, exist_ok=True)
             marker.write_text("")
             return item, "404"
-        return item, "ok"
+        return item, "cache" if fetch.last_was_stale() else "ok"
 
-    counts = {"ok": 0, "404": 0, "error": 0, "budget": 0}
+    counts = {"ok": 0, "cache": 0, "404": 0, "error": 0, "budget": 0}
     if todo:
         log.info("Období %s: %d stránek ke stažení zvlášť (%d z cache)", period.year, len(todo), p_cached)
     with ThreadPoolExecutor(max_workers=max(1, config.FETCH_WORKERS)) as pool:
         for n, ((t, dest, _m), res) in enumerate(pool.map(get, todo), 1):
             counts[res] += 1
-            if res in ("ok", "budget", "error") and dest.exists():
+            if res in ("ok", "cache", "budget", "error") and dest.exists():
                 pages[(t.schuze, t.turn)] = ("file", dest)  # i starší kopie z cache
             if n % 100 == 0 or n == len(todo):
                 log.info("Období %s: stránky zvlášť %d / %d (%s) · %.0f min", period.year, n, len(todo), counts, fetch.elapsed_minutes())

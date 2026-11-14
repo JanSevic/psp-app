@@ -16,6 +16,9 @@ def reset(monkeypatch):
     monkeypatch.setattr(config, "BACKOFF_RECOVER", 3)
     monkeypatch.setattr(fetch, "_delay", None)
     monkeypatch.setattr(fetch, "_ok_streak", 0)
+    monkeypatch.setattr(fetch, "_fail_streak", 0)
+    monkeypatch.setattr(fetch, "_outage_until", None)
+    monkeypatch.setattr(fetch, "stats", {"stale": 0, "skipped_outage": 0})
     monkeypatch.setattr(fetch.time, "sleep", lambda s: None)  # testy nečekají
 
 
@@ -72,3 +75,60 @@ def test_fetch_retries_after_503(tmp_path, monkeypatch):
     assert path.read_bytes() == b"ok" and changed
     assert hits["n"] == 2
     assert fetch.current_delay() == 2.0
+
+
+def test_outage_breaker_uses_cache_and_stops_requests(tmp_path, monkeypatch):
+    """psp.cz nenavazuje spojení: po OUTAGE_FAILS chybách už se nechodí na server."""
+    monkeypatch.setattr(config, "OUTAGE_FAILS", 3)
+    calls = {"n": 0}
+
+    def dead(*a, **kw):
+        calls["n"] += 1
+        raise fetch.requests.ConnectTimeout("timed out")
+
+    monkeypatch.setattr(fetch.requests.Session, "get", dead)
+    cached = []
+    for i in range(10):
+        f = tmp_path / f"p{i}.htm"
+        f.write_text("stará kopie")
+        cached.append(f)
+    for f in cached:
+        path, changed = fetch.fetch(f"http://psp.invalid/{f.name}", f)
+        assert path == f and not changed and fetch.last_was_stale()
+    assert calls["n"] == 3  # 3 neúspěšné pokusy, pak jistič
+    assert fetch.in_outage()
+    with pytest.raises(RuntimeError):
+        fetch.fetch("http://psp.invalid/novy.htm", tmp_path / "novy.htm")
+    assert calls["n"] == 3
+    assert fetch.stats["stale"] == 10
+
+
+def test_outage_probe_recovers(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "OUTAGE_FAILS", 1)
+    monkeypatch.setattr(config, "OUTAGE_PROBE_MINUTES", 0)  # zkušební požadavek hned
+
+    class R:
+        status_code = 200
+        headers = {}
+
+        def raise_for_status(self):
+            pass
+
+        def iter_content(self, n):
+            yield b"nove"
+
+    state = {"up": False}
+
+    def get(*a, **kw):
+        if not state["up"]:
+            raise fetch.requests.ConnectTimeout("timed out")
+        return R()
+
+    monkeypatch.setattr(fetch.requests.Session, "get", get)
+    f = tmp_path / "x.htm"
+    f.write_text("stara")
+    fetch.fetch("http://psp.invalid/x", f)
+    assert fetch._outage_until is not None
+    state["up"] = True
+    path, changed = fetch.fetch("http://psp.invalid/x", f)
+    assert changed and f.read_text() == "nove" and fetch._outage_until is None

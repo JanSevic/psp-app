@@ -522,6 +522,11 @@ def build(dist: Path | None = None, only_periods: set[int] | None = None) -> Non
     from .photos import sync_photos  # import až zde kvůli cyklu (photos používá write_json)
 
     sync_photos(people, dist, only_periods)
+    if fetch.stats["skipped_outage"]:
+        log.warning(
+            "psp.cz bylo během běhu nedostupné: %d požadavků přeskočeno, %d souborů použito ze starší cache",
+            fetch.stats["skipped_outage"], fetch.stats["stale"],
+        )
     write_json(
         dist / "data" / "periods.json",
         {

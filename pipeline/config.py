@@ -29,6 +29,11 @@ CONNECT_TIMEOUT = float(os.environ.get("PSP_CONNECT_TIMEOUT", "20"))  # navázá
 # úspěšných požadavcích v řadě se zase zkrátí na polovinu (nejméně REQUEST_DELAY).
 MAX_DELAY = float(os.environ.get("PSP_MAX_DELAY", "30"))
 BACKOFF_RECOVER = int(os.environ.get("PSP_BACKOFF_RECOVER", "20"))
+# Výpadek („jistič“): po OUTAGE_FAILS síťových chybách za sebou se přestane na psp.cz
+# chodit – co je v cache, vezme se z cache, zbytek se dotáhne příště. Jednou za
+# OUTAGE_PROBE_MINUTES se zkusí jeden požadavek, jestli už server zase odpovídá.
+OUTAGE_FAILS = int(os.environ.get("PSP_OUTAGE_FAILS", "8"))
+OUTAGE_PROBE_MINUTES = float(os.environ.get("PSP_OUTAGE_PROBE_MINUTES", "10"))
 USER_AGENT = os.environ.get(
     "PSP_USER_AGENT",
     "PSP-app (https://github.com/JanSevic/PSP-app; nocni zpracovani otevrenych dat)",

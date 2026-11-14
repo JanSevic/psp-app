@@ -38,6 +38,54 @@ def session() -> requests.Session:
 
 _delay: float | None = None  # aktuální pauza mezi požadavky (přizpůsobuje se)
 _ok_streak = 0
+_fail_streak = 0  # síťové chyby za sebou (bez jakékoli odpovědi serveru)
+_outage_until: float | None = None  # jistič: do kdy na psp.cz nechodit (monotonic)
+stats = {"stale": 0, "skipped_outage": 0}
+
+
+def in_outage() -> bool:
+    """True = psp.cz je teď vyhodnocené jako nedostupné a nemá se volat.
+
+    Po uplynutí OUTAGE_PROBE_MINUTES vrátí jednomu volajícímu False (zkušební
+    požadavek); ostatní mezitím dál čekají na jeho výsledek.
+    """
+    global _outage_until
+    with _lock:
+        if _outage_until is None:
+            return False
+        now = time.monotonic()
+        if now < _outage_until:
+            return True
+        _outage_until = now + config.OUTAGE_PROBE_MINUTES * 60  # tohle vlákno zkouší
+        return False
+
+
+def _net_failure() -> None:
+    global _fail_streak, _outage_until
+    with _lock:
+        _fail_streak += 1
+        trip = _outage_until is None and _fail_streak >= config.OUTAGE_FAILS
+        if trip:
+            _outage_until = time.monotonic() + config.OUTAGE_PROBE_MINUTES * 60
+    if trip:
+        log.warning(
+            "psp.cz neodpovídá (%d chyb za sebou) – dál beru data z cache, chybějící se dotáhnou příště; "
+            "zkusím to znovu za %.0f min", _fail_streak, config.OUTAGE_PROBE_MINUTES,
+        )
+
+
+def _server_answered() -> None:
+    global _fail_streak, _outage_until
+    with _lock:
+        was = _outage_until is not None
+        _fail_streak, _outage_until = 0, None
+    if was:
+        log.info("psp.cz zase odpovídá – pokračuji ve stahování")
+
+
+def last_was_stale() -> bool:
+    """Poslední fetch() v tomto vlákně vrátil starší kopii z cache místo nové."""
+    return getattr(_local, "stale", False)
 
 
 def current_delay() -> float:
@@ -113,6 +161,17 @@ def fetch(url: str, dest: Path, *, conditional: bool = True, retries: int = 3) -
     kopie v cache; pak ji vrátí (a zaloguje varování).
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
+    _local.stale = False
+    probing = False
+    if _outage_until is not None:
+        if in_outage():
+            stats["skipped_outage"] += 1
+            if dest.exists():
+                _local.stale = True
+                stats["stale"] += 1
+                return dest, False
+            raise RuntimeError(f"psp.cz nedostupné, přeskočeno: {url}")
+        probing, retries = True, 1
     meta_file = _meta_path(dest)
     headers = {}
     if conditional and dest.exists() and meta_file.exists():
@@ -127,6 +186,7 @@ def fetch(url: str, dest: Path, *, conditional: bool = True, retries: int = 3) -
         _throttle()
         try:
             r = session().get(url, headers=headers, timeout=(config.CONNECT_TIMEOUT, config.HTTP_TIMEOUT), stream=True)
+            _server_answered()
             if r.status_code == 304:
                 _success()
                 return dest, False
@@ -158,9 +218,14 @@ def fetch(url: str, dest: Path, *, conditional: bool = True, retries: int = 3) -
             last_exc = exc
             if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
                 _backoff(type(exc).__name__)
+                _net_failure()
             log.warning("Chyba při stahování %s (pokus %d): %s", url, attempt + 1, exc)
+            if probing or _outage_until is not None:
+                break  # jistič vypnul – další pokusy nemají smysl
             time.sleep(max(2 * (attempt + 1), current_delay()))
     if dest.exists():
+        _local.stale = True
+        stats["stale"] += 1
         log.warning("Používám starší kopii z cache: %s", dest)
         return dest, False
     raise RuntimeError(f"Nepodařilo se stáhnout {url}") from last_exc
