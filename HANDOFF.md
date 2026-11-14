@@ -231,6 +231,17 @@ Zjištění:
 
 ## 5. Známé slabiny a nápady (neřešit bez domluvy)
 
+- **Statistika hlasování se liší od psp.cz o 23 hlasování** (ověřeno 14. 11. 2026 na 10. období,
+  data hl-2025ps.zip ze 14. 11. 01:54, devět poslanců: Havlíček, Adamec, Babiš, Bartoň,
+  Bartošová, Bendl, Berkovcová, Bouška, Bureš). psp.cz (`sqw/pstat.sqw`) má u všech celkem
+  2651 hlasování, my 2674 (2702 minus 28 zmatečných ze `zmatecne.unl`). Jde o stejných 23
+  hlasování pro všechny; omluvy a kategorie jinak sedí, procento „Hlasoval“ na desetinu.
+  Vyloučeno: nejnovější hlasování (zpoždění), sousedé zmatečných, celá schůze/den,
+  výsledek, počet přihlášených, prázdný název. Domněnka: psp.cz má vlastní seznam vyřazených
+  hlasování, který v otevřených datech není. Autor rozhodl nechat zatím tak, bez poznámky
+  na webu. Možné další kroky: dotaz na Sněmovnu, nebo porovnání se seznamem hlasování
+  na pstat.sqw pro jednoho poslance (pokud ho psp.cz vypisuje).
+
 - `actions/cache` ukládá každou noc nový klíč s celou cache (stovky MB až GB). Zvážit
   stabilnější klíč nebo ukládat jen při změně.
 - `web/app.js` → `otherPeriods` načítá `people.json` všech období kvůli odkazům
