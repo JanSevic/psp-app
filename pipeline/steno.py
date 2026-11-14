@@ -483,7 +483,7 @@ def build_speeches(
     speeches: list[Speech] = []
     stats = {"pages": 0, "speeches": 0, "matched_rec": 0, "by_order": 0, "no_rec": 0, "osoba_mismatch": 0, "continuations": 0}
     last_in_schuze: dict[int, Speech] = {}
-    current_bod: dict[tuple, int] = {}  # (schůze, den) -> bod posledního vystoupení
+    current_bod: dict[int, int] = {}
     # V některých obdobích (6.) má `rec.druh` všude 5 – pak roli neurčuje, bere se z jmenovky.
     druh_ok = any(
         r.get("druh") in (2, 3, 4)
@@ -551,7 +551,7 @@ def build_speeches(
             # Bod: z `rec`; když tam chybí, jde většinou o vystoupení mimo projednávaný
             # bod (viz infer_missing_bods) – pak jen značka bodu na téže stránce před
             # vystoupením nebo rozprava, která pokračuje kolem něj. Jen když k vystoupení
-            # žádný `rec` není, platí bod předchozího vystoupení téže schůze a téhož dne.
+            # žádný `rec` není, platí bod předchozího vystoupení téže schůze.
             id_bod = r.get("id_bod") if r else None
             if id_bod is None:
                 an = ps.aname if ps.aname is not None else (r.get("aname") if r else None)
@@ -563,9 +563,9 @@ def build_speeches(
                     stats["mimo_bod" if id_bod is None else "bod_z_okoli"] = stats.get(
                         "mimo_bod" if id_bod is None else "bod_z_okoli", 0) + 1
                 else:
-                    id_bod = current_bod.get((sch, st.datum if st else None))
+                    id_bod = current_bod.get(sch)
             if id_bod is not None:
-                current_bod[(sch, st.datum if st else None)] = id_bod
+                current_bod[sch] = id_bod
             if osoba is None and name_index is not None:
                 osoba = notes.resolve_label(name_index, ps.label)
                 if osoba is not None:

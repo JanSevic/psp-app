@@ -244,6 +244,38 @@ Zjištění:
   nebo souhrn `--stats` do logu běhu (logy jsou čitelné přes `gh api .../jobs/<id>/logs`).
 - Web běží na https://www.ševic.eu/psp-app/ (GitHub Pages s vlastní doménou).
 
+## Kontrola správnosti dat (14. 11. 2026)
+
+Workflow „Diagnostika dat osoby“ s parametrem `kontrola` (např. `8 9 10`) spustí
+`scripts/audit.py` a `scripts/audit_probe.py` nad cache a posledním webem a vypíše podezřelá
+místa (jmenovka vs. přiřazená osoba, role, body chybějící v bod_schuze, vystoupení bez `rec`,
+značky bodů, součty statistik hlasování). Spustit lze i na větvi (`ref`), nic nenasazuje.
+
+Nalezeno a opraveno (větev `oprava-kontrola`):
+- 9. období: ~730 vystoupení připsáno jiné osobě. Stránky ze ZIPů 2021 nemají odkaz na osobu
+  a `rec` je v některých turnech posunuté (hlavně 112. schůze) – text předsedajícího se připsal
+  ministrovi, text poslance předsedajícímu (a jako „řízení“ se neshrnul). Nově: když příjmení
+  osoby z `rec` v jmenovce není a jmenovka jednoznačně patří jiné osobě, platí jmenovka
+  (`osoba_dle_jmenovky` ve statistice). Zbylé neshody jsou změny příjmení (Opltová/Řehková).
+- Body z `rec`, které v bod_schuze chybí (sloučené rozpravy, sliby – ~2 400 vystoupení
+  v 8. období, ~1 300 v 9.), měly název „Mimo projednávaný bod“. Nově nadpis ze stenoprotokolu.
+- Web: pohlaví žen je v otevřených datech „Ž“ (výjimečně „Z“), statistiky hlasování testovaly
+  jen „Z“ → u většiny poslankyň mužský rod.
+
+Zjištěno, neřešeno (ke zvážení s autorem):
+- `steno_bod.aname` nesouvisí s kotvami `r<aname>` (shoda <1 %); pravidlo „značka bodu na
+  stránce“ se uplatní jen výjimečně (1× za období). Neškodí, ale nic nepřináší.
+- 10. období: 941 vystoupení bez `rec` (stránka má víc vystoupení než data; nejnovější schůze
+  rec zatím nemá vůbec) – bod se přebírá z předchozího vystoupení schůze, případně nadpis
+  stránky. Zkušební omezení na týž den zvýšilo počet „mimo bod“ o ~800 (hlavně 10. schůze),
+  proto vráceno; správnost obou variant neověřena.
+- Shrnutí se cachují jen podle textu, ne podle názvu bodu. Když se změní jen přiřazení bodu
+  (text skupiny stejný), zůstane shrnutí vytvořené s původním názvem bodu.
+- Shrnování jde od nejnovějších schůzí, u kterých psp.cz ještě nemusí mít úplná data
+  (`rec`); po doplnění se skupiny změní a shrnou znovu.
+- `omluvy.unl` pro 9. období obsahuje každý záznam až ~2 000× (992 673 řádků, 28 573
+  unikátních) – výsledek to nemění, jen log ukazuje přehnaný počet.
+
 ## 5. Známé slabiny a nápady (neřešit bez domluvy)
 
 - **Statistika hlasování se liší od psp.cz o 23 hlasování** (ověřeno 14. 11. 2026 na 10. období,
@@ -258,7 +290,7 @@ Zjištění:
   na pstat.sqw pro jednoho poslance (pokud ho psp.cz vypisuje).
 
 - **Spotřeba předplatného na shrnutí** (změřil autor 14. 11. 2026): jeden noční běh shrnutí
-  (`SUMMARY_MAX_CALLS` 105, sonnet, úsilí high) bere 8–9 % týdenního limitu a 96 %
+  (`SUMMARY_MAX_CALLS` 105, sonnet, úsilí high; autor pak výchozí strop snížil na 50) bere 8–9 % týdenního limitu a 96 %
   pětihodinového (session) limitu, tedy je těsně pod stropem. Autor rozhodl nechat beze
   změny. Kdyby bylo potřeba šetřit: méně volání za noc, střední úsilí pro krátké skupiny
   (`effort_for` v kódu je připravené), nebo shrnovat jen obden.
