@@ -426,6 +426,40 @@ def _guess_osoby(parsed: list[ParsedSpeech], recs: list[dict], surnames: dict[in
             ps.guess_osoba = hits.pop() if len(hits) == 1 else None
 
 
+def infer_missing_bods(meta: StenoMeta, organ_id: int) -> dict[tuple[int, int | None], int]:
+    """Bod pro záznamy `rec` bez bodu, které leží uvnitř rozpravy k jednomu bodu.
+
+    psp.cz neuvádí bod u vystoupení mimo projednávaný bod (přednostní práva na
+    začátku dne, návrhy k pořadu schůze, vystoupení po přerušení). Takové
+    vystoupení se k bodu nepřiřadí. Výjimka: předchozí i následující záznam
+    s bodem v téže schůzi mají stejný bod – pak jde o vystoupení uvnitř rozpravy.
+    Vrací {(id_steno, aname): id_bod}.
+    """
+    by_schuze: dict[int, list] = {}
+    for t in meta.turns.values():
+        if t.organ_id != organ_id:
+            continue
+        for r in meta.rec.get(t.id_steno, []):
+            by_schuze.setdefault(t.schuze, []).append(((t.turn, r["aname"] or 0), t.id_steno, r))
+    out = {}
+    for rows in by_schuze.values():
+        rows.sort(key=lambda x: x[0])
+        bods = [r["id_bod"] for _, _, r in rows]
+        prev = None
+        nxt = [None] * len(rows)
+        last = None
+        for i in range(len(rows) - 1, -1, -1):
+            nxt[i] = last
+            if bods[i] is not None:
+                last = bods[i]
+        for i, (_, sid, r) in enumerate(rows):
+            if bods[i] is not None:
+                prev = bods[i]
+            elif prev is not None and prev == nxt[i]:
+                out[(sid, r["aname"])] = prev
+    return out
+
+
 def build_speeches(
     period: Period, pages: dict[tuple[int, int], PageRef], meta: StenoMeta, surnames: dict[int, str] | None = None,
     name_index=None,
@@ -441,6 +475,7 @@ def build_speeches(
         for t in meta.turns.values() if t.organ_id == period.organ_id
         for r in meta.rec.get(t.id_steno, [])
     )
+    inferred = infer_missing_bods(meta, period.organ_id)
     for (sch, turn) in sorted(pages):
         try:
             html = load_page(pages[(sch, turn)])
@@ -493,14 +528,22 @@ def build_speeches(
                     druh = None
                 else:
                     osoba = r["id_osoba"]
-            # rec.id_bod bývá nevyplněné (0) i uprostřed dlouhé rozpravy. Pak platí
-            # poslední značka bodu na této stránce před vystoupením, jinak bod
-            # předchozího vystoupení téže schůze (bod pokračuje, dokud nezačne další).
+            # Bod: z `rec`; když tam chybí, jde většinou o vystoupení mimo projednávaný
+            # bod (viz infer_missing_bods) – pak jen značka bodu na téže stránce před
+            # vystoupením nebo rozprava, která pokračuje kolem něj. Jen když k vystoupení
+            # žádný `rec` není, platí bod předchozího vystoupení téže schůze.
             id_bod = r.get("id_bod") if r else None
             if id_bod is None:
                 an = ps.aname if ps.aname is not None else (r.get("aname") if r else None)
                 cand = [b for a, b in marks if an is not None and a <= an]
-                id_bod = cand[-1] if cand else current_bod.get(sch)
+                if cand:
+                    id_bod = cand[-1]
+                elif r is not None and st is not None:
+                    id_bod = inferred.get((st.id_steno, r.get("aname")))
+                    stats["mimo_bod" if id_bod is None else "bod_z_okoli"] = stats.get(
+                        "mimo_bod" if id_bod is None else "bod_z_okoli", 0) + 1
+                else:
+                    id_bod = current_bod.get(sch)
             if id_bod is not None:
                 current_bod[sch] = id_bod
             if osoba is None and name_index is not None:

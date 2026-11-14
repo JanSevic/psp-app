@@ -84,12 +84,23 @@ def test_zip_page_alignment_when_counts_differ():
     assert speeches[2].aname == 3 and speeches[4].aname == 5
 
 
-def test_missing_bod_carries_over_within_schuze():
+def test_missing_bod_is_outside_agenda_item():
+    """psp.cz neuvádí bod u vystoupení mimo projednávaný bod – nepřilepit k předchozímu."""
     rows = [(6214, 1, 111, 4), (6211, 2, 0, 5), (6214, 3, 0, 4)] + [(o, a, 0, d) for o, a, _, d in REC_53[3:]]
     pages = {(1, 53): ("file", FIX / "zip_2025_s001053.htm")}
-    speeches, _ = steno.build_speeches(_period(), pages, _meta(_recs(rows), marks=[(7, 222)]))
-    # do značky bodu (aname 7) platí předchozí bod, od ní nový
-    assert [s.id_bod for s in speeches] == [111] * 6 + [222] * 5
+    speeches, stats = steno.build_speeches(_period(), pages, _meta(_recs(rows), marks=[(7, 222)]))
+    # bez bodu až do značky bodu (aname 7), od ní nový bod
+    assert [s.id_bod for s in speeches] == [111] + [None] * 5 + [222] * 5
+    assert stats["mimo_bod"] == 5
+
+
+def test_missing_bod_inside_one_debate():
+    """Záznam bez bodu mezi dvěma záznamy téhož bodu patří do jeho rozpravy."""
+    rows = [(o, a, 0 if a in (2, 3) else 111, d) for o, a, _, d in REC_53]
+    pages = {(1, 53): ("file", FIX / "zip_2025_s001053.htm")}
+    speeches, stats = steno.build_speeches(_period(), pages, _meta(_recs(rows)))
+    assert [s.id_bod for s in speeches] == [111] * 11
+    assert stats["bod_z_okoli"] == 2
 
 
 def test_old_pages_colon_inside_label():

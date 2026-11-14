@@ -229,6 +229,20 @@ Zjištění:
    secret `CLAUDE_CODE_OAUTH_TOKEN`; ruční spuštění workflow.
 6. Potvrdit s autorem body z části „Rozhodnuto bez výslovného souhlasu“.
 
+## Přiřazení vystoupení k bodům (oprava 14. 11. 2026)
+
+- `rec.id_bod` chybí u vystoupení mimo projednávaný bod (přednostní práva na začátku
+  dne, návrhy k pořadu, po přerušení). 10. období: 15 411 záznamů s bodem, 5 120 bez bodu
+  na hranici bodů, jen 179 bez bodu uvnitř rozpravy k jednomu bodu (9. období obdobně).
+- Dřív se taková vystoupení přilepila k bodu předchozího vystoupení téže schůze (i z jiného
+  dne) – shrnutí pak neodpovídala názvu bodu (nahlášeno u V. Rakušana). Nově: značka bodu
+  na téže stránce → jinak bod jen tehdy, když předchozí i následující záznam s bodem mají
+  stejný bod (`infer_missing_bods`) → jinak „Bez určeného bodu“ (skupina za den).
+- Ověřování na reálných datech: workflow „Diagnostika dat osoby“ (`diag.yml`) – vypíše
+  data osoby z hotového webu, `rec`/`steno_bod`/nadpisy stránek (`scripts/diag_turns.py`)
+  nebo souhrn `--stats` do logu běhu (logy jsou čitelné přes `gh api .../jobs/<id>/logs`).
+- Web běží na https://www.ševic.eu/psp-app/ (GitHub Pages s vlastní doménou).
+
 ## 5. Známé slabiny a nápady (neřešit bez domluvy)
 
 - **Statistika hlasování se liší od psp.cz o 23 hlasování** (ověřeno 14. 11. 2026 na 10. období,
