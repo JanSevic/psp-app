@@ -245,7 +245,7 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
     pid_to_osoba = {to_int(p["id_poslanec"]): to_int(p["id_osoba"]) for p in deputies}
     deputy_rows = {to_int(p["id_osoba"]): p for p in deputies}
     omluvy: dict[int, list[tuple]] = {}
-    for r in people.omluvy:
+    for r in (opendata.load_omluvy(hl_zip) if hl_zip else []):
         if to_int(r.get("id_organ")) not in (None, period.organ_id):
             continue
         pid, den = to_int(r.get("id_poslanec")), to_date(r.get("den"))

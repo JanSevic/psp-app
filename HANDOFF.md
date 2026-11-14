@@ -52,7 +52,7 @@ Moje návrhy, které autor schválil („ano, pusť se do toho“):
 - úvodní stránka má záložky Poslanci / Ostatní řečníci / Hledat v projevech;
 - statistika hlasování jako na psp.cz (`sqw/pstat.sqw`): Hlasoval = A + N + zdržel se (C, F, K);
   Omluven = M; Nepřihlášen = @; základ = hlasování během mandátu bez zmatečných a bez W.
-  Kódy `@` v době omluvy z tabulky `omluvy` (poslanci.zip: id_organ, id_poslanec, den, od, do;
+  Kódy `@` v době omluvy z tabulky `omluvy` (hl-<rok>ps.zip: id_organ, id_poslanec, den, od, do;
   prázdné od/do = celý den) se přeznačí na `M` – otevřená data u omluvených uvádějí `@`.
   Formát časů od/do v reálných datech neověřen (parser bere HH:MM i HH.MM), viz log „Omluvy: …“.
 

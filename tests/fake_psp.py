@@ -88,8 +88,6 @@ def build(root: Path) -> None:
                 "osoby.unl": unl(osoby),
                 "poslanec.unl": unl(poslanec),
                 "zarazeni.unl": unl(zarazeni),
-                # Svobodová omluvena 10. 11. 2021 10:00–10:20 → hlasování 80001 (10:15) je „omluven“
-                "omluvy.unl": unl([[173, 9102, "10.11.2021", "10:00", "10:20"], [173, 9100, "12.01.2022", None, None]]),
             }
         )
     )
@@ -106,7 +104,9 @@ def build(root: Path) -> None:
         [9100, 80003, "M"], [9101, 80003, "C"],
     ]
     (od / "hl-2021ps.zip").write_bytes(
-        zip_bytes({"hl2021s.unl": unl(hl), "hl2021h1.unl": unl(hl_posl), "zmatecne.unl": unl([[80003]])})
+        zip_bytes({"hl2021s.unl": unl(hl), "hl2021h1.unl": unl(hl_posl), "zmatecne.unl": unl([[80003]]),
+                  # Svobodová omluvena 10. 11. 2021 10:00–10:20 → hlasování 80001 (10:15) je „omluven“
+                  "omluvy.unl": unl([[173, 9102, "10.11.2021", "10:00", "10:20"], [173, 9100, "12.01.2022", None, None]])})
     )
     hl13 = [[60001, 171, 5, 3, 2, "2014-03-04", "09:00", 1, 1, 0, 0, 2, 2, "N", "A", "Starší hlasování", ""]]
     (od / "hl-2013ps.zip").write_bytes(
