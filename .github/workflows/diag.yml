@@ -1,0 +1,43 @@
+# Diagnostika: vypíše do logu data jedné osoby z posledního hotového webu
+# (artefakt „site“ z nočního běhu). Nic nestahuje z psp.cz a nic nenasazuje.
+name: Diagnostika dat osoby
+
+on:
+  workflow_dispatch:
+    inputs:
+      obdobi:
+        description: "Číslo volebního období"
+        default: "10"
+      osoba:
+        description: "id_osoba (např. 6524 = Vít Rakušan)"
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Stažení posledního hotového webu
+        run: |
+          for id in $(gh run list --workflow nightly.yml --status success --limit 10 \
+                        --json databaseId --jq '.[].databaseId'); do
+            if gh run download "$id" -n site -D dist 2>/dev/null; then echo "Web z běhu $id"; exit 0; fi
+            rm -rf dist
+          done
+          echo "::error::Nenalezen artefakt site"; exit 1
+      - name: Výpis dat osoby
+        run: |
+          d="dist/data/${{ inputs.obdobi }}"
+          for f in "o/${{ inputs.osoba }}.json" "sum/${{ inputs.osoba }}.json"; do
+            echo "===== $f"; cat "$d/$f" 2>/dev/null || echo "(chybí)"; echo
+          done
+          f="s/${{ inputs.osoba }}.json.gz"
+          echo "===== $f"; (gzip -dc "$d/$f" 2>/dev/null || cat "$d/$f" 2>/dev/null || echo "(chybí)"); echo
+          echo "===== KONEC"
