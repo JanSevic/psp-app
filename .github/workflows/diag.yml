@@ -76,4 +76,6 @@ jobs:
         if: inputs.kontrola != ''
         env:
           PSP_CACHE_DIR: ${{ github.workspace }}/cache
-        run: PYTHONPATH=. python scripts/audit.py ${{ inputs.kontrola }}
+        run: |
+          PYTHONPATH=. python scripts/audit.py ${{ inputs.kontrola }}
+          PYTHONPATH=. python scripts/audit_probe.py ${{ inputs.kontrola }}
