@@ -80,6 +80,23 @@ def main(nums):
         show("vystoupení bez osoby (na webu se neukážou)", Counter(s.label for s in no_osoba))
         print(f"    z toho slov: {sum(len(' '.join(s.paragraphs).split()) for s in no_osoba)}")
 
+        # jmenovka neodpovídá přiřazené osobě (příjmení osoby v jmenovce chybí)
+        def _fold(x):
+            return re.sub(r"\s+", " ", x.lower())
+        wrong = [s for s in speeches if s.id_osoba and surnames.get(s.id_osoba)
+                 and _fold(surnames[s.id_osoba]).split(" ")[0] not in _fold(s.label)]
+        show("jmenovka neodpovídá osobě (jmenovka → přiřazená osoba)",
+             Counter((s.label, opendata.person_name(people.osoby.get(s.id_osoba)), s.role) for s in wrong), 10)
+        print(f"    z toho role řečník: {sum(1 for s in wrong if s.role == 'speaker')}, slov: {sum(len(' '.join(s.paragraphs).split()) for s in wrong)}")
+        print(f"    podle schůze: {Counter(s.schuze for s in wrong).most_common(8)}")
+        # body bez názvu v bod_schuze: najde se nadpis u jiného vystoupení téhož bodu?
+        head_by_bod = {}
+        for s in speeches:
+            if s.id_bod is not None and s.id_bod not in bods and s.heading and s.id_bod not in head_by_bod:
+                head_by_bod[s.id_bod] = s.heading
+        unk = {s.id_bod for s in speeches if s.id_bod is not None and s.id_bod not in bods}
+        print(f"  neznámé body: {len(unk)}, s nadpisem u některého vystoupení: {len(head_by_bod)}; ukázky {list(head_by_bod.values())[:3]}")
+
         # role: jmenovka předsedajícího u role řečníka a naopak
         chair_lbl = lambda s: s.label.lower().startswith(steno.CHAIR_PREFIXES)
         show("role řečník, ale jmenovka předsedajícího", Counter(s.label for s in speeches if s.role == "speaker" and chair_lbl(s)), 6)
