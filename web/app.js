@@ -44,6 +44,19 @@ async function getJSON(url) {
 }
 
 const periodInfo = (num) => META.periods.find((p) => p.num === +num);
+const yearOf = (d) => (d ? d.slice(0, 4) : "");
+
+// Předložka před řadovou číslovkou období: „ve“ jen před souhláskovou skupinou
+// (ve druhém, ve třetím, ve čtvrtém), jinak „v“ (v prvním, v pátém … v osmém, v devátém, v desátém).
+const PREP_VE = new Set([2, 3, 4]);
+const prep = (n) => (PREP_VE.has(+n) ? "ve" : "v");
+
+// „v 9. období“, „ve 3. a 9. období“ – odkazy na stránku osoby v jiných obdobích
+function periodsPhrase(nums, id) {
+  const links = nums.map((n) => `<a href="#/${n}/o/${id}">${n}.</a>`);
+  const list = links.length > 1 ? `${links.slice(0, -1).join(", ")} a ${links.at(-1)}` : links[0];
+  return `${prep(nums[0])} ${list} období`;
+}
 const voteLabel = (c) => META.vote_codes[c] || (c === "?" ? "neznámo" : c);
 
 function setTitle(t) {
@@ -96,9 +109,12 @@ route();
 
 function renderPeriodNav(num) {
   const nav = document.getElementById("period-nav");
-  nav.innerHTML = `<label class="meta">Volební období
+  nav.innerHTML = `<label>Volební období
     <select id="period-sel">${META.periods
-      .map((p) => `<option value="${p.num}" ${p.num === num ? "selected" : ""}>${esc(p.label)}</option>`)
+      .map(
+        (p) =>
+          `<option value="${p.num}" ${p.num === num ? "selected" : ""}>${p.num}. (${p.year}–${yearOf(p.do)})</option>`
+      )
       .join("")}</select></label>`;
   nav.querySelector("select").onchange = (e) => (location.hash = `#/${e.target.value}`);
 }
@@ -114,10 +130,10 @@ async function renderPeriod(num, tab, q) {
     ["ostatni", "Ostatní řečníci"],
     ["hledat", "Hledat v projevech"],
   ];
-  const head = `<h1>${esc(info.label)}</h1>
-    <p class="meta">${fmtNum(info.n_deputies)} poslanců · ${fmtNum(info.n_votes)} hlasování${
-      info.has_speeches ? ` · ${fmtNum(info.n_speeches)} vystoupení` : ""
-    }</p>
+  const head = `<h1>${info.num}. volební období</h1>
+    <p class="meta">${info.od ? `${info.do ? "" : "od "}${fmtDate(info.od)}${info.do ? ` – ${fmtDate(info.do)}` : ""} · ` : ""}${fmtNum(
+      info.n_deputies
+    )} poslanců · ${fmtNum(info.n_votes)} hlasování${info.has_speeches ? ` · ${fmtNum(info.n_speeches)} vystoupení` : ""}</p>
     <nav class="tabs">${tabs
       .map(([k, l]) => `<a href="#/${num}/${k}" class="${k === tab ? "on" : ""}">${l}</a>`)
       .join("")}</nav>`;
@@ -139,22 +155,24 @@ async function renderPeriod(num, tab, q) {
       ? `<p class="note">Projevy jsou zatím zpracované od volebního období ${META.speeches_from_year}.</p>`
       : "") +
     `<div class="filters">
-      <label>Jméno<input id="f-text" type="search" value="${esc(st.text)}" placeholder="např. Novák"></label>
+      <label class="grow">Jméno<input id="f-text" type="search" value="${esc(st.text)}" placeholder="např. Novák"></label>
       ${
         deputies
-          ? `<label>Klub<select id="f-klub"><option value="">všechny</option>${clubs
+          ? `<label>Klub<select id="f-klub"><option value="">všechny kluby</option>${clubs
               .map((c) => `<option ${c === st.klub ? "selected" : ""}>${esc(c)}</option>`)
               .join("")}</select></label>`
           : ""
       }
-      <span class="meta" id="f-count"></span>
     </div>
-    <table><thead><tr>
+    <p class="meta count" id="f-count"></p>
+    <div class="table-wrap"><table><thead><tr>
       <th class="sort" data-k="sort">Jméno</th>
       ${deputies ? `<th class="sort" data-k="klub">Klub</th><th class="sort hide-sm" data-k="kraj">Kraj</th><th class="sort num" data-k="ucast">Účast</th>` : `<th class="sort" data-k="funkce">Funkce</th>`}
       ${info.has_speeches ? `<th class="sort num" data-k="vystoupeni">Vystoupení</th>` : ""}
-    </tr></thead><tbody id="rows"></tbody></table>`;
+    </tr></thead><tbody id="rows"></tbody></table></div>`;
 
+  const labels = {};
+  app.querySelectorAll("th.sort").forEach((th) => (labels[th.dataset.k] = th.textContent));
   const draw = () => {
     const t = norm(st.text);
     let rows = list.filter((p) => (!t || norm(p.name).includes(t)) && (!st.klub || p.klub === st.klub));
@@ -163,10 +181,15 @@ async function renderPeriod(num, tab, q) {
       if (typeof x === "number" || typeof y === "number") return ((x ?? -1) - (y ?? -1)) * st.dir;
       return String(x ?? "").localeCompare(String(y ?? ""), "cs") * st.dir;
     });
-    app.querySelector("#f-count").textContent = `${rows.length} osob`;
+    app.querySelectorAll("th.sort").forEach((th) => {
+      const on = th.dataset.k === st.sort;
+      th.innerHTML = esc(labels[th.dataset.k]) + (on ? `<span class="arrow" aria-hidden="true"> ${st.dir > 0 ? "↑" : "↓"}</span>` : "");
+      th.setAttribute("aria-sort", on ? (st.dir > 0 ? "ascending" : "descending") : "none");
+    });
+    app.querySelector("#f-count").textContent = `${fmtNum(rows.length)} osob`;
     app.querySelector("#rows").innerHTML = rows
       .map(
-        (p) => `<tr><td><a href="#/${num}/o/${p.id}">${esc(p.name)}</a></td>
+        (p) => `<tr><td><a class="name" href="#/${num}/o/${p.id}">${esc(p.name)}</a></td>
         ${
           deputies
             ? `<td>${esc(p.klub || "")}</td><td class="hide-sm">${esc(p.kraj || "")}</td><td class="num">${
@@ -211,37 +234,67 @@ async function renderPerson(num, id, tab, key) {
   if (!tab || !tabs.some(([k]) => k === tab)) tab = tabs[0][0];
 
   const club = d.kluby?.length ? d.kluby[d.kluby.length - 1] : null;
-  const sub = [
-    d.poslanec ? (d.pohlavi === "M" ? "poslanec" : "poslankyně") : d.funkce,
-    club ? `klub ${club.zkratka}` : null,
-    d.kraj,
-    d.kandidatka ? `zvolen(a) za ${d.kandidatka}` : null,
-  ].filter(Boolean);
-  const mandat = d.mandat ? `Mandát: ${fmtDate(d.mandat.od)} – ${d.mandat.do ? fmtDate(d.mandat.do) : "dosud"}` : "";
-  const clubHist =
-    d.kluby?.length > 1
-      ? `<br>Kluby: ${d.kluby
-          .map((k) => `${esc(k.zkratka)} (${fmtDate(k.od)} – ${k.do ? fmtDate(k.do) : "dosud"})`)
-          .join(", ")}`
-      : "";
+  const role = d.poslanec ? (d.pohlavi === "M" ? "Poslanec" : "Poslankyně") : d.funkce || "Řečník";
+  const fromTo = (a, b) => `${fmtDate(a)} – ${b ? fmtDate(b) : "dosud"}`;
+  const facts = [];
+  if (club)
+    facts.push([
+      "Klub",
+      esc(club.nazev || club.zkratka) +
+        (d.kluby.length > 1
+          ? d.kluby.map((k) => `<span class="hist">${esc(k.zkratka)}: ${fromTo(k.od, k.do)}</span>`).join("")
+          : ""),
+    ]);
+  if (d.kraj) facts.push(["Volební kraj", esc(d.kraj)]);
+  if (d.kandidatka) facts.push([d.pohlavi === "M" ? "Zvolen za" : "Zvolena za", esc(d.kandidatka)]);
+  if (d.mandat) facts.push(["Mandát", d.mandat.do ? fromTo(d.mandat.od, d.mandat.do) : `od ${fmtDate(d.mandat.od)}`]);
+  const h = d.statistiky.hlasovani;
+  const pr = d.statistiky.projevy;
+  const nums = [];
+  if (h?.celkem) nums.push(["Účast", h.ucast == null ? "–" : h.ucast.toLocaleString("cs-CZ") + " %"], ["Hlasování", fmtNum(h.celkem)]);
+  if (info.has_speeches) nums.push(["Vystoupení", fmtNum(pr.vystoupeni)]);
+  if (info.has_speeches && !h?.celkem) nums.push(["Body", fmtNum(pr.body)]);
+  const numsHTML = nums.map(([a, b]) => `<div><div class="label">${a}</div><div class="n">${b}</div></div>`).join("");
+  const back = `<a class="back" href="#/${num}">← ${info.num}. volební období</a>`;
+  const profile = `<a href="${esc(d.psp_url)}" target="_blank" rel="noopener">Profil na psp.cz ↗</a>`;
+  const name = esc(d.full_name || d.name);
 
-  app.innerHTML = `
-    <p class="meta"><a href="#/${num}">← ${esc(info.label)}</a></p>
-    <h1>${esc(d.full_name || d.name)}</h1>
-    <p class="meta">${esc(sub.join(" · "))}${mandat ? "<br>" + esc(mandat) : ""}${clubHist}
-      <br><a href="${esc(d.psp_url)}" target="_blank" rel="noopener">Profil na psp.cz</a>
-      <span id="other-periods"></span></p>
-    <nav class="tabs">${tabs
-      .map(([k, l]) => `<a href="#/${num}/o/${id}/${k}" class="${k === tab ? "on" : ""}">${l}</a>`)
-      .join("")}</nav>
-    <div id="tab"></div>`;
+  // široké okno: sloupec vlevo
+  const side = `<aside class="person-side">${back}
+    <section class="panel">
+      <h1>${name}</h1>
+      <p class="role">${esc(role)}</p>
+      <dl class="facts">${facts.map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join("")}</dl>
+      ${nums.length ? `<div class="nums">${numsHTML}</div>` : ""}
+      <p class="plinks">${profile}<span class="other-periods"></span></p>
+    </section></aside>`;
+  // úzké okno: hlavička přes celou šířku (dva nadpisy v DOM, viditelný je vždy jen jeden)
+  const top = `<div class="person-top">${back}
+    <section class="panel">
+      <div class="who">
+        <h1>${name}</h1>
+        <p class="role">${esc(role)} · ${profile}<span class="other-periods"></span></p>
+        <dl class="facts-row">${facts
+          .map(([a, b]) => `<div><dt class="label">${a}</dt><dd>${a === "Klub" ? esc(club.zkratka) : b}</dd></div>`)
+          .join("")}</dl>
+      </div>
+      ${nums.length ? `<div class="nums">${numsHTML}</div>` : ""}
+    </section></div>`;
+
+  app.innerHTML = `<div class="person">${side}
+    <div class="person-main">${top}
+      <nav class="tabs" aria-label="Záložky">${tabs
+        .map(([k, l]) => `<a href="#/${num}/o/${id}/${k}" class="${k === tab ? "on" : ""}"${k === tab ? ' aria-current="page"' : ""}>${l}</a>`)
+        .join("")}</nav>
+      <div id="tab"></div>
+    </div></div>`;
   otherPeriods(num, id);
   const el = app.querySelector("#tab");
   if (tab === "hlasovani") await renderVotes(el, num, d);
   else if (tab === "projevy") await renderSpeeches(el, num, d, key);
   else if (tab === "shrnuti") await renderSummaries(el, num, d);
   else if (tab === "statistiky") renderStats(el, d, info);
-  else if (tab === "hledat") renderSearch(el, { num, osoba: id, name: d.name });
+  else if (tab === "hledat") renderSearch(el, { num, osoba: id, name: d.name, pohlavi: d.pohlavi });
 }
 
 async function otherPeriods(num, id) {
@@ -249,12 +302,13 @@ async function otherPeriods(num, id) {
   for (const p of META.periods) {
     if (p.num === num) continue;
     const people = await getJSON(`data/${p.num}/people.json`).catch(() => null);
-    if (people?.some((x) => x.id === id)) found.push(p);
+    if (people?.some((x) => x.id === id)) found.push(p.num);
   }
-  const span = document.getElementById("other-periods");
-  if (span && found.length)
-    span.innerHTML =
-      " · Další období: " + found.map((p) => `<a href="#/${p.num}/o/${id}">${p.num}.</a>`).join(", ");
+  if (!found.length) return;
+  found.sort((a, b) => a - b);
+  document.querySelectorAll(".other-periods").forEach((span) => {
+    span.innerHTML = (span.closest(".person-top") ? " · také " : "<br>Také ") + periodsPhrase(found, id);
+  });
 }
 
 function noSpeechesNote(info) {
@@ -289,19 +343,22 @@ async function renderVotes(el, num, d) {
       <label>Schůze<select id="f-sch"><option value="">všechny</option>${schuzeList
         .map((s) => `<option value="${s}" ${String(s) === st.schuze ? "selected" : ""}>${s}.</option>`)
         .join("")}</select></label>
-      <label>Hledat v názvu<input type="search" id="f-text" value="${esc(st.text)}"></label>
-      <label>Jak hlasoval<span class="checks">${codesPresent
-        .map(
-          (c) =>
-            `<span><input type="checkbox" value="${esc(c)}" ${st.codes.has(c) ? "checked" : ""}> <span class="${codeClass(c)}">${esc(voteLabel(c))}</span></span>`
-        )
-        .join("")}</span></label>
-      <label class="checks"><span><input type="checkbox" id="f-zm" ${st.hideZm ? "checked" : ""}> skrýt zmatečná</span></label>
+      <label class="grow">Hledat v názvu<input type="search" id="f-text" value="${esc(st.text)}"></label>
     </div>
-    <p class="meta" id="count"></p>
-    <table><thead><tr><th>Datum</th><th class="hide-sm">Schůze / č.</th><th>Hlasování</th><th>Hlasoval(a)</th><th class="hide-sm">Výsledek</th></tr></thead>
-    <tbody id="rows"></tbody></table>
-    <button class="more" id="more">Zobrazit další</button>`;
+    <div class="chips" role="group" aria-label="Jak hlasoval">${codesPresent
+      .map(
+        (c) =>
+          `<button type="button" class="chip" data-code="${esc(c)}" aria-pressed="${st.codes.has(c)}">${esc(voteLabel(c))}</button>`
+      )
+      .join("")}
+      <label class="check"><input type="checkbox" id="f-zm" ${st.hideZm ? "checked" : ""}> skrýt zmatečná</label>
+    </div>
+    <p class="meta count" id="count"></p>
+    <div class="table-wrap"><table><thead><tr><th>Datum · schůze</th><th>Hlasování · výsledek</th><th>Hlasoval${
+      d.pohlavi === "M" ? "" : "a"
+    }</th></tr></thead>
+    <tbody id="rows"></tbody></table></div>
+    <button class="btn more" id="more">Zobrazit dalších 200</button>`;
 
   const draw = () => {
     const t = norm(st.text);
@@ -315,18 +372,23 @@ async function renderVotes(el, num, d) {
       if (t && !norm(v[C.nazev]).includes(t)) return false;
       return true;
     });
-    el.querySelector("#count").textContent = `${fmtNum(filtered.length)} z ${fmtNum(rows.length)} hlasování`;
+    el.querySelector("#count").textContent = `${fmtNum(filtered.length)} z ${fmtNum(rows.length)} hlasování · nejnovější nahoře`;
     el.querySelector("#rows").innerHTML = filtered
       .slice(0, st.limit)
       .map(({ v, code }) => {
-        const res = v[C.zmatecne] ? "Z" : v[C.vysledek];
+        const zm = !!v[C.zmatecne];
+        const res = zm ? "Z" : v[C.vysledek];
         const resLabel = res === "A" ? "přijato" : res === "R" ? "zamítnuto" : "zmatečné";
-        return `<tr>
-          <td class="nowrap">${fmtDate(v[C.datum])}${v[C.cas] ? `<br><span class="meta">${esc(v[C.cas])}</span>` : ""}</td>
-          <td class="hide-sm nowrap">${v[C.schuze]}. / ${v[C.cislo]}</td>
-          <td><a href="${PSP}/sqw/hlasy.sqw?g=${v[C.id]}" target="_blank" rel="noopener">${esc(v[C.nazev] || "(bez názvu)")}</a></td>
-          <td><span class="badge ${codeClass(code)}">${esc(voteLabel(code))}</span></td>
-          <td class="hide-sm"><span class="res-${res}">${resLabel}</span><br><span class="meta">${v[C.pro] ?? "–"} : ${v[C.proti] ?? "–"}</span></td>
+        return `<tr${zm ? ' class="zm"' : ""}>
+          <td class="date"><span class="d">${fmtDate(v[C.datum])}</span>
+            <div class="sub">${v[C.cas] ? esc(v[C.cas]) + " · " : ""}${v[C.schuze]}. schůze, č. ${v[C.cislo]}</div></td>
+          <td><a href="${PSP}/sqw/hlasy.sqw?g=${v[C.id]}" target="_blank" rel="noopener">${esc(v[C.nazev] || "(bez názvu)")}</a>${
+            zm ? '<span class="tag">zmatečné</span>' : ""
+          }
+            <div class="sub"><span class="res-${res}">${resLabel}</span>${
+              zm ? "" : ` · <span class="num">${v[C.pro] ?? "–"} : ${v[C.proti] ?? "–"}</span>`
+            }</div></td>
+          <td><span class="vote ${codeClass(code)}">${esc(voteLabel(code))}</span></td>
         </tr>`;
       })
       .join("");
@@ -338,8 +400,14 @@ async function renderVotes(el, num, d) {
   el.querySelector("#f-sch").onchange = (e) => ((st.schuze = e.target.value), reset());
   el.querySelector("#f-text").oninput = (e) => ((st.text = e.target.value), reset());
   el.querySelector("#f-zm").onchange = (e) => ((st.hideZm = e.target.checked), reset());
-  el.querySelectorAll(".checks input[value]").forEach(
-    (cb) => (cb.onchange = () => (cb.checked ? st.codes.add(cb.value) : st.codes.delete(cb.value), reset()))
+  el.querySelectorAll(".chip").forEach(
+    (b) =>
+      (b.onclick = () => {
+        const c = b.dataset.code;
+        st.codes.has(c) ? st.codes.delete(c) : st.codes.add(c);
+        b.setAttribute("aria-pressed", st.codes.has(c));
+        reset();
+      })
   );
   el.querySelector("#more").onclick = () => ((st.limit += 200), draw());
   draw();
@@ -365,10 +433,9 @@ async function renderSpeeches(el, num, d, focusKey) {
     if (idx >= st.limit) st.limit = idx + 5;
   }
   el.innerHTML = `<div class="filters">
-      <label>Bod nebo schůze<input type="search" id="f-text" value="${esc(st.text)}" placeholder="název bodu, číslo schůze"></label>
-      <label class="checks"><span><input type="checkbox" id="f-chair" ${st.chair ? "checked" : ""}> zobrazit i řízení schůze</span></label>
-      <span class="meta" id="count"></span>
-    </div><div id="list"></div><button class="more" id="more">Zobrazit další body</button>`;
+      <label class="grow">Bod nebo schůze<input type="search" id="f-text" value="${esc(st.text)}" placeholder="název bodu, číslo schůze"></label>
+      <label class="check"><input type="checkbox" id="f-chair" ${st.chair ? "checked" : ""}> zobrazit i řízení schůze</label>
+    </div><p class="meta count" id="count"></p><div id="list"></div><button class="btn more" id="more">Zobrazit další body</button>`;
 
   const draw = () => {
     const t = norm(st.text);
@@ -401,7 +468,7 @@ async function renderSpeeches(el, num, d, focusKey) {
 
 function groupHTML(g) {
   return `<section class="group" id="g-${esc(g.key)}">
-    <header><span class="meta">${fmtDate(g.datum)} · ${g.schuze}. schůze${g.bod_cislo > 0 ? ` · bod ${g.bod_cislo}` : ""}</span>
+    <header><div class="label">${fmtDate(g.datum)} · ${g.schuze}. schůze${g.bod_cislo > 0 ? ` · bod ${g.bod_cislo}` : ""}</div>
     <h3>${esc(g.bod)}</h3></header>
     ${g.speeches.map(speechHTML).join("")}
     ${g.poznamky?.length ? notesHTML(g.poznamky) : ""}
@@ -410,29 +477,29 @@ function groupHTML(g) {
 
 // Poznámky stenografů o osobě zapsané během vystoupení jiných řečníků (výkřiky, chování)
 function notesHTML(notes) {
-  return `<div class="speech notes">
-    <div><span class="who">Zaznamenáno ve stenozáznamu</span>
-      <span class="meta">během vystoupení jiných řečníků</span></div>
+  return `<aside class="notes">
+    <div class="title">Zaznamenáno ve stenozáznamu</div>
+    <div class="meta">výkřiky a chování během vystoupení jiných řečníků</div>
     <ul>${notes
       .map(
-        (n) => `<li>(${esc(n.text)}) <span class="meta">${n.odhad ? "(přiřazeno podle kontextu) " : ""}– během vystoupení: ${esc(n.kde)}${
-          n.cas ? ", úsek od " + esc(n.cas) : ""
-        } · <a href="${esc(n.url)}" target="_blank" rel="noopener">psp.cz</a></span></li>`
+        (n) => `<li><span class="t">(${esc(n.text)})</span><div class="meta">${n.odhad ? "přiřazeno podle kontextu · " : ""}během vystoupení: ${esc(n.kde)}${
+          n.cas ? " · úsek od " + esc(n.cas) : ""
+        } · <a href="${esc(n.url)}" target="_blank" rel="noopener">psp.cz ↗</a></div></li>`
       )
       .join("")}</ul>
-  </div>`;
+  </aside>`;
 }
 
 function speechHTML(s) {
   const long = s.text.length > 6;
   return `<div class="speech ${s.role === "chair" ? "chair" : ""}">
-    <div><span class="who">${esc(s.label)}</span>
-      <span class="meta">${s.datum ? fmtDate(s.datum) : ""}${s.cas ? ", úsek od " + esc(s.cas) : ""}${
-        s.role === "chair" ? " · řízení schůze" : ""
-      }</span></div>
-    <div class="${long ? "collapsed" : ""}">${s.text.map((p) => `<p>${esc(p)}</p>`).join("")}</div>
-    ${long ? `<button class="expand">Zobrazit celé vystoupení</button>` : ""}
-    <div class="links"><a href="${esc(s.url)}" target="_blank" rel="noopener">Kontext jednání na psp.cz</a></div>
+    <div class="who"><strong>${esc(s.label)}</strong>
+      <span class="meta">${s.datum ? fmtDate(s.datum) : ""}${s.cas ? ", úsek od " + esc(s.cas) : ""}</span>${
+        s.role === "chair" ? '<span class="pill">řízení schůze</span>' : ""
+      }</div>
+    <div class="text ${long ? "collapsed" : ""}">${s.text.map((p) => `<p>${esc(p)}</p>`).join("")}</div>
+    ${long ? `<button type="button" class="expand">Zobrazit celé vystoupení (${s.text.length - 3} dalších odstavců)</button>` : ""}
+    <div class="links"><a href="${esc(s.url)}" target="_blank" rel="noopener">Kontext jednání na psp.cz ↗</a></div>
   </div>`;
 }
 
@@ -452,10 +519,13 @@ async function renderSummaries(el, num, d) {
   const key = `sums-${num}-${d.id}`;
   const st = (ui[key] ||= { hideChair: false, limit: 50, text: "" });
   el.innerHTML = `<div class="filters">
-      <label>Bod nebo schůze<input type="search" id="f-text" value="${esc(st.text)}"></label>
-      <label class="checks"><span><input type="checkbox" id="f-chair" ${st.hideChair ? "checked" : ""}> skrýt body, kde jen řídil(a) schůzi</span></label>
-      <span class="meta" id="count"></span>
-    </div><div id="list"></div><button class="more" id="more">Zobrazit další</button>`;
+      <label class="grow">Bod nebo schůze<input type="search" id="f-text" value="${esc(st.text)}"></label>
+      <label class="check"><input type="checkbox" id="f-chair" ${st.hideChair ? "checked" : ""}> skrýt body, kde jen ${
+        d.pohlavi === "M" ? "řídil" : "řídila"
+      } schůzi</label>
+    </div>
+    <p class="meta count"><span id="count"></span> · Shrnutí vytváří umělá inteligence z plného znění, citace v uvozovkách jsou doslovné.</p>
+    <div id="list"></div><button class="btn more" id="more">Zobrazit další</button>`;
   const draw = () => {
     const t = norm(st.text);
     const list = d.body.filter((g) => {
@@ -468,17 +538,20 @@ async function renderSummaries(el, num, d) {
       .map((g) => {
         const s = sums[g.key] || { s: "pending" };
         let body;
-        if (s.s === "ok" || s.s === "short") body = `<ul>${s.b.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>`;
-        else if (s.s === "chair") body = `<p class="meta">Pouze řízení schůze.</p>`;
-        else body = `<p class="meta">Shrnutí zatím není hotové – vytváří se postupně při nočním zpracování.</p>`;
-        return `<section class="group summary"><header><span class="meta">${fmtDate(g.datum)} · ${g.schuze}. schůze${
+        if (s.s === "ok" || s.s === "short") {
+          const tone = s.b.filter((b) => /^Tón:/.test(b));
+          const rest = s.b.filter((b) => !/^Tón:/.test(b));
+          body = `<ul>${rest.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>${tone.map((b) => `<p class="tone">${esc(b)}</p>`).join("")}`;
+        } else if (s.s === "chair") body = `<p class="state">Pouze řízení schůze.</p>`;
+        else body = `<p class="state">Shrnutí zatím není hotové – vytváří se postupně při nočním zpracování.</p>`;
+        return `<section class="group summary"><header><div class="label">${fmtDate(g.datum)} · ${g.schuze}. schůze${
           g.bod_cislo > 0 ? ` · bod ${g.bod_cislo}` : ""
-        } · ${g.n_speaker} ${g.n_speaker === 1 ? "vystoupení" : "vystoupení"}${g.n > g.n_speaker ? ` + ${g.n - g.n_speaker}× řízení` : ""}${
-          g.n_pozn ? ` + ${g.n_pozn}× ve stenozáznamu` : ""
-        }</span>
+        } · ${g.n_speaker} vystoupení${g.n > g.n_speaker ? ` · ${g.n - g.n_speaker}× řízení` : ""}${
+          g.n_pozn ? ` · ${g.n_pozn}× ve stenozáznamu` : ""
+        }</div>
           <h3>${esc(g.bod)}</h3></header>
-          <div class="speech">${body}
-          <div class="links"><a href="#/${num}/o/${d.id}/projevy/${encodeURIComponent(g.key)}">Plné znění</a></div></div></section>`;
+          ${body}
+          <div class="links"><a href="#/${num}/o/${d.id}/projevy/${encodeURIComponent(g.key)}"><strong>Plné znění →</strong></a></div></section>`;
       })
       .join("");
     el.querySelector("#more").style.display = list.length > st.limit ? "" : "none";
@@ -500,26 +573,26 @@ function renderStats(el, d, info) {
     const max = Math.max(...Object.values(h.pocty));
     html += `<h2>Hlasování</h2>
       <div class="cards">
-        <div class="card"><div class="meta">Účast</div><div class="big">${h.ucast == null ? "–" : h.ucast.toLocaleString("cs-CZ") + " %"}</div></div>
-        <div class="card"><div class="meta">Hlasování během mandátu</div><div class="big">${fmtNum(h.celkem)}</div></div>
+        <div class="card"><div class="label">Účast</div><div class="n">${h.ucast == null ? "–" : h.ucast.toLocaleString("cs-CZ") + " %"}</div></div>
+        <div class="card"><div class="label">Hlasování během mandátu</div><div class="n">${fmtNum(h.celkem)}</div></div>
       </div>
-      <table><tbody>${order
+      <div class="table-wrap"><table><tbody>${order
         .filter((c) => h.pocty[c])
         .map(
           (c) => `<tr><td class="${codeClass(c)}">${esc(voteLabel(c))}</td><td class="num">${fmtNum(h.pocty[c])}</td>
           <td class="num">${((100 * h.pocty[c]) / h.celkem).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} %</td>
           <td style="width:45%"><div class="bar" style="width:${(100 * h.pocty[c]) / max}%"></div></td></tr>`
         )
-        .join("")}</tbody></table>
+        .join("")}</tbody></table></div>
       <p class="meta">Účast = podíl hlasování, kdy byl(a) přihlášen(a) (ano, ne, zdržel se, nehlasoval), ze všech hlasování během mandátu
       kromě hlasování před složením slibu.</p>`;
   }
   if (info.has_speeches) {
     html += `<h2>Projevy</h2><div class="cards">
-      <div class="card"><div class="meta">Vystoupení</div><div class="big">${fmtNum(p.vystoupeni)}</div></div>
-      <div class="card"><div class="meta">Řízení schůze (vstupy)</div><div class="big">${fmtNum(p.rizeni)}</div></div>
-      <div class="card"><div class="meta">Body, ke kterým mluvil(a)</div><div class="big">${fmtNum(p.body)}</div></div>
-      <div class="card"><div class="meta">Slov ve vystoupeních</div><div class="big">${fmtNum(p.slova)}</div></div>
+      <div class="card"><div class="label">Vystoupení</div><div class="n">${fmtNum(p.vystoupeni)}</div></div>
+      <div class="card"><div class="label">Řízení schůze (vstupy)</div><div class="n">${fmtNum(p.rizeni)}</div></div>
+      <div class="card"><div class="label">Body, ke kterým ${d.pohlavi === "M" ? "mluvil" : "mluvila"}</div><div class="n">${fmtNum(p.body)}</div></div>
+      <div class="card"><div class="label">Slov ve vystoupeních</div><div class="n">${fmtNum(p.slova)}</div></div>
     </div>`;
   }
   el.innerHTML = html || `<p class="note">Žádné statistiky.</p>`;
@@ -537,10 +610,10 @@ function loadPagefind() {
   return pagefindPromise;
 }
 
-function renderSearch(el, { num, osoba, name, global, initial = "" }) {
+function renderSearch(el, { num, osoba, name, pohlavi, global, initial = "" }) {
   const st = (ui[`search-${num}-${osoba || "all"}`] ||= { q: initial, scope: "period" });
   el.innerHTML = `<div class="filters">
-      <label style="flex:1">${osoba ? `Hledat v tom, co řekl(a) ${esc(name)}` : "Hledat ve všech projevech"}
+      <label class="grow">${osoba ? `Hledat v tom, co ${pohlavi === "M" ? "řekl" : "řekla"} ${esc(name)}` : "Hledat ve všech projevech"}
         <input type="search" id="q" value="${esc(st.q)}" placeholder="slovo nebo fráze"></label>
       ${
         global
@@ -548,7 +621,7 @@ function renderSearch(el, { num, osoba, name, global, initial = "" }) {
               <option value="all" ${st.scope === "all" ? "selected" : ""}>všechna období s projevy</option></select></label>`
           : ""
       }
-    </div><p class="meta" id="count"></p><ul class="results" id="res"></ul><button class="more" id="more" style="display:none">Další výsledky</button>`;
+    </div><p class="meta count" id="count"></p><ul class="results" id="res"></ul><button class="btn more" id="more" style="display:none">Další výsledky</button>`;
   let timer, results = [], shown = 0, seq = 0;
   const showMore = async (mySeq) => {
     const slice = results.slice(shown, shown + 20);

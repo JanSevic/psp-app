@@ -12,8 +12,9 @@ psp.cz a nasazují se jako statický web na GitHub Pages.
 - **Nepředpokládej nic, co nebylo výslovně řečeno.** Před netriviálním rozhodnutím (rozsah,
   chování UI, co se zobrazuje, co se shrnuje, náklady) se nejdřív zeptej. Technické detaily
   implementace můžeš rozhodnout sám, ale v odpovědi je jasně označ jako svůj návrh.
-- Vzhled webu je zatím záměrně jednoduchý; grafiku budeme ladit společně později – neměň ho
-  bez zadání.
+- Vzhled webu je odsouhlasený návrh „A1 + sloupec z A2“ (14. 11. 2026, plátno „PSP-app – návrh
+  vzhledu“ v Claude Design): tmavě modrá lišta, Source Serif 4 / Source Sans 3 (hostované ve
+  `web/fonts`), údaje o osobě ve sloupci vlevo, pod 1024 px hlavička přes celou šířku. Neměň ho bez zadání.
 - Pokud v kódu nebo dokumentaci použiješ odborný termín, který nemusí být jasný, vysvětli ho.
 
 ## Příkazy
