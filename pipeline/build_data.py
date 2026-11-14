@@ -519,6 +519,9 @@ def build(dist: Path | None = None, only_periods: set[int] | None = None) -> Non
             continue
         infos.append(build_period(period, people, schuze_tab, bods, steno_meta, dist, work))
     infos.sort(key=lambda i: i["num"], reverse=True)
+    from .photos import sync_photos  # import až zde kvůli cyklu (photos používá write_json)
+
+    sync_photos(people, dist, only_periods)
     write_json(
         dist / "data" / "periods.json",
         {

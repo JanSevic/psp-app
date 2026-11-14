@@ -104,6 +104,12 @@ Výstupy pro web (`dist/data`):
 - `<P>/s/<id_osoba>.json.gz`: projevy seskupené podle `key = "<schuze>-b<id_bod>"`
 - `<P>/sum/<id_osoba>.json`: `{key: {s: ok|short|chair|pending, b: [odrážky]}}`
 - `summary-status.json`: stav shrnování a info o posledním běhu
+- `<P>/fotky.json` + `<P>/foto/<id_osoba>.jpg`: fotky poslanců (sloupec `poslanec.foto = 1`,
+  URL `/eknih/cdrom/<rok>ps/eknih/<rok>ps/poslanci/i<id>.jpg`, 201×250 px). Stahují se jen jednou,
+  nejnovější období první, v rámci časového rozpočtu. Podmínky psp.cz: fotky neměnit ani neořezávat,
+  nepoužít komerčně ani pro volební kampaň, u fotky uvést „Foto: Kancelář Poslanecké sněmovny“.
+- Účast a přehled hlasování se počítají jen z doby mandátu (`mask_to_mandate`): otevřená data
+  obsahují u některých poslanců záznamy i mimo mandát.
 
 ## 3. Neověřené předpoklady – ověřit jako první
 

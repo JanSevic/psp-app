@@ -44,6 +44,30 @@ async function getJSON(url) {
 }
 
 const periodInfo = (num) => META.periods.find((p) => p.num === +num);
+const PHOTO_CREDIT = "Foto: Kancelář Poslanecké sněmovny";
+const photoUrl = (num, id) => `data/${num}/foto/${id}.jpg`;
+async function photoSet(num) {
+  const ids = await getJSON(`data/${num}/fotky.json`).catch(() => null);
+  return new Set(ids || []);
+}
+
+// Velká fotka v dialogu (z malé fotky v seznamu). Fotky se podle podmínek psp.cz nemění ani neořezávají.
+function openPhoto(num, id, name) {
+  let dlg = document.getElementById("photo-dialog");
+  if (!dlg) {
+    dlg = document.createElement("dialog");
+    dlg.id = "photo-dialog";
+    dlg.addEventListener("click", (e) => e.target === dlg && dlg.close());
+    document.body.append(dlg);
+  }
+  dlg.innerHTML = `<figure class="photo">
+      <img src="${photoUrl(num, id)}" alt="Fotografie: ${esc(name)}">
+      <figcaption>${PHOTO_CREDIT}</figcaption></figure>
+    <p><strong>${esc(name)}</strong><br><a href="#/${num}/o/${id}">Stránka osoby →</a></p>
+    <form method="dialog"><button class="btn">Zavřít</button></form>`;
+  dlg.querySelector("a").onclick = () => dlg.close();
+  dlg.showModal();
+}
 const yearOf = (d) => (d ? d.slice(0, 4) : "");
 
 // Předložka před řadovou číslovkou období: „ve“ jen před souhláskovou skupinou
@@ -124,6 +148,7 @@ function renderPeriodNav(num) {
 async function renderPeriod(num, tab, q) {
   const info = periodInfo(num);
   const people = (await getJSON(`data/${num}/people.json`)) || [];
+  const photos = await photoSet(num);
   setTitle(info.label);
   const tabs = [
     ["poslanci", "Poslanci"],
@@ -189,7 +214,13 @@ async function renderPeriod(num, tab, q) {
     app.querySelector("#f-count").textContent = `${fmtNum(rows.length)} osob`;
     app.querySelector("#rows").innerHTML = rows
       .map(
-        (p) => `<tr><td><a class="name" href="#/${num}/o/${p.id}">${esc(p.name)}</a></td>
+        (p) => `<tr><td><div class="person-cell">${
+          photos.has(p.id)
+            ? `<button type="button" class="thumb" data-id="${p.id}" data-name="${esc(p.name)}" aria-label="Zvětšit fotografii: ${esc(
+                p.name
+              )}"><img src="${photoUrl(num, p.id)}" alt="" loading="lazy" width="32"></button>`
+            : `<span class="thumb none" aria-hidden="true"></span>`
+        }<a class="name" href="#/${num}/o/${p.id}">${esc(p.name)}</a></div></td>
         ${
           deputies
             ? `<td>${esc(p.klub || "")}</td><td class="hide-sm">${esc(p.kraj || "")}</td><td class="num">${
@@ -200,6 +231,7 @@ async function renderPeriod(num, tab, q) {
         ${info.has_speeches ? `<td class="num">${fmtNum(p.vystoupeni)}</td>` : ""}</tr>`
       )
       .join("");
+    app.querySelectorAll("button.thumb").forEach((b) => (b.onclick = () => openPhoto(num, +b.dataset.id, b.dataset.name)));
   };
   app.querySelector("#f-text").oninput = (e) => ((st.text = e.target.value), draw());
   const fk = app.querySelector("#f-klub");
@@ -258,10 +290,16 @@ async function renderPerson(num, id, tab, key) {
   const back = `<a class="back" href="#/${num}">← ${info.num}. volební období</a>`;
   const profile = `<a href="${esc(d.psp_url)}" target="_blank" rel="noopener">Profil na psp.cz ↗</a>`;
   const name = esc(d.full_name || d.name);
+  const hasPhoto = (await photoSet(num)).has(id);
+  const figure = hasPhoto
+    ? `<figure class="photo"><img src="${photoUrl(num, id)}" alt="Fotografie: ${esc(d.name)}" width="201">
+        <figcaption>${PHOTO_CREDIT}</figcaption></figure>`
+    : "";
 
   // široké okno: sloupec vlevo
   const side = `<aside class="person-side">${back}
     <section class="panel">
+      ${figure}
       <h1>${name}</h1>
       <p class="role">${esc(role)}</p>
       <dl class="facts">${facts.map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join("")}</dl>
@@ -271,6 +309,7 @@ async function renderPerson(num, id, tab, key) {
   // úzké okno: hlavička přes celou šířku (dva nadpisy v DOM, viditelný je vždy jen jeden)
   const top = `<div class="person-top">${back}
     <section class="panel">
+      ${figure}
       <div class="who">
         <h1>${name}</h1>
         <p class="role">${esc(role)} · ${profile}<span class="other-periods"></span></p>

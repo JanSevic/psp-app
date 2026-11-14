@@ -192,3 +192,10 @@ def test_votes_outside_mandate_are_ignored():
     # dva mandáty v jednom období (odchod a návrat)
     two = [(date(2021, 10, 21), date(2021, 12, 31)), (date(2023, 1, 1), None)]
     assert mask_to_mandate("AAA.", dates, two) == "A.A."
+
+
+def test_photos(built):
+    dist, _ = built
+    assert load(dist / "data" / "9" / "fotky.json") == [101]  # 102 má foto=1, ale soubor chybí
+    assert (dist / "data" / "9" / "foto" / "101.jpg").read_bytes().startswith(b"\xff\xd8")
+    assert load(dist / "data" / "7" / "fotky.json") == []

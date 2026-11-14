@@ -151,6 +151,21 @@ tr.zm { opacity: .6; }
   .person-top { display: block; }
 }
 
+/* fotky (podle podmínek psp.cz beze změny a neořezané, se zdrojem) */
+.photo { margin: 0 0 1rem; }
+.photo img { display: block; max-width: 100%; height: auto; }
+.photo figcaption { font-size: .72rem; color: var(--muted); margin-top: .3rem; }
+.person-top .photo { flex: 0 0 auto; width: 120px; margin: 0; }
+.person-cell { display: flex; align-items: center; gap: .75rem; }
+.thumb { flex: 0 0 32px; width: 32px; padding: 0; border: 0; background: none; line-height: 0; cursor: zoom-in; }
+.thumb img { width: 32px; height: auto; display: block; }
+.thumb.none { height: 1px; }
+#photo-dialog { border: 0; border-top: 4px solid var(--navy); padding: 1.5rem; max-width: min(92vw, 360px);
+  background: var(--bg); color: var(--fg); }
+#photo-dialog::backdrop { background: rgba(10, 18, 34, .55); }
+#photo-dialog .photo img { width: 201px; }
+#photo-dialog p { margin: .5rem 0 1rem; }
+
 /* ---------------------------------------------------------------- body pořadu, projevy, shrnutí */
 .group { border: 1px solid var(--line); border-top: 3px solid var(--navy); padding: 1.4rem 1.6rem; margin: 0 0 1rem; }
 .group.hl { outline: 3px solid var(--accent); outline-offset: 2px; }

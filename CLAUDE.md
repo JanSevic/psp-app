@@ -48,6 +48,7 @@ pipeline/
   opendata.py    načtení tabulek: osoby/poslanci/orgány/zařazení, hlasování, schůze/body, steno metadata
   steno.py       stažení stenoprotokolů (ZIPy + chybějící stránky) a parsování HTML na vystoupení
   build_data.py  sestavení JSON pro web + vstupy pro shrnutí a fulltext
+  photos.py      fotky poslanců z psp.cz (jen jednou, beze změny, se zdrojem „Foto: Kancelář PS“)
   summarize.py   shrnutí osoba × bod přes `claude -p`, úložiště state/summaries.jsonl.gz
   __main__.py    CLI
 scripts/build-search.mjs   Pagefind index z state/work/search-*.jsonl.gz

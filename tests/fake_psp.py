@@ -61,8 +61,8 @@ def build(root: Path) -> None:
     ]
     poslanec = [
         [9100, 100, 601, 701, 173] + [None] * 10,
-        [9101, 101, 601, 701, 173] + [None] * 10,
-        [9102, 102, 601, 701, 173] + [None] * 10,
+        [9101, 101, 601, 701, 173] + [None] * 9 + [1],  # foto = 1 (fotka existuje)
+        [9102, 102, 601, 701, 173] + [None] * 9 + [1],  # foto = 1, ale na serveru chybí (404)
         [7103, 103, 601, 701, 171] + [None] * 10,
         [7101, 101, 601, 701, 171] + [None] * 10,
     ]
@@ -77,6 +77,9 @@ def build(root: Path) -> None:
         [103, 171, 0, "2013-10-26 00", "2017-10-21 00", None, None],
         [101, 171, 0, "2013-10-26 00", "2017-10-21 00", None, None],
     ]
+    foto = root / "eknih" / "cdrom" / "2021ps" / "eknih" / "2021ps" / "poslanci"
+    foto.mkdir(parents=True, exist_ok=True)
+    (foto / "i101.jpg").write_bytes(b"\xff\xd8\xff\xe0fake-jpeg")
     (od / "poslanci.zip").write_bytes(
         zip_bytes(
             {
