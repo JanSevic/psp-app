@@ -9,8 +9,17 @@ on:
         description: "Číslo volebního období"
         default: "10"
       osoba:
-        description: "id_osoba (např. 6524 = Vít Rakušan)"
-        required: true
+        description: "id_osoba (např. 6524 = Vít Rakušan), prázdné = přeskočit"
+        default: ""
+      turny:
+        description: "Stránky stenoprotokolu k rozboru přiřazení bodů, např. 34-518 34-164"
+        default: ""
+      rok:
+        description: "Rok období pro stenoprotokoly (2025 = 10. období)"
+        default: "2025"
+      organ:
+        description: "id_organ období (174 = 10. období)"
+        default: "174"
 
 permissions:
   contents: read
@@ -24,7 +33,25 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Obnovení cache stažených dat
+        if: inputs.turny != ''
+        uses: actions/cache/restore@v5
+        with:
+          path: cache
+          key: psp-cache-diag-${{ github.run_id }}
+          restore-keys: psp-cache-
+      - name: Rozbor přiřazení bodů
+        if: inputs.turny != ''
+        env:
+          PSP_CACHE_DIR: ${{ github.workspace }}/cache
+        run: python scripts/diag_turns.py ${{ inputs.rok }} ${{ inputs.organ }} ${{ inputs.turny }}
       - name: Stažení posledního hotového webu
+        if: inputs.osoba != ''
         run: |
           for id in $(gh run list --workflow nightly.yml --status success --limit 10 \
                         --json databaseId --jq '.[].databaseId'); do
@@ -33,6 +60,7 @@ jobs:
           done
           echo "::error::Nenalezen artefakt site"; exit 1
       - name: Výpis dat osoby
+        if: inputs.osoba != ''
         run: |
           d="dist/data/${{ inputs.obdobi }}"
           for f in "o/${{ inputs.osoba }}.json" "sum/${{ inputs.osoba }}.json"; do
