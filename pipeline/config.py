@@ -22,7 +22,13 @@ SPEECHES_FROM_YEAR = int(os.environ.get("SPEECHES_FROM_YEAR", "2017"))
 
 # Slušnost vůči psp.cz: pauza mezi požadavky (s)
 REQUEST_DELAY = float(os.environ.get("PSP_REQUEST_DELAY", "0.3"))
-HTTP_TIMEOUT = float(os.environ.get("PSP_HTTP_TIMEOUT", "90"))
+HTTP_TIMEOUT = float(os.environ.get("PSP_HTTP_TIMEOUT", "90"))  # čtení odpovědi (s)
+CONNECT_TIMEOUT = float(os.environ.get("PSP_CONNECT_TIMEOUT", "20"))  # navázání spojení (s)
+# Přizpůsobení pauzy: když psp.cz odmítá spojení, neodpovídá nebo vrací 429/5xx,
+# pauza mezi požadavky se zdvojnásobí (nejvýš MAX_DELAY); po BACKOFF_RECOVER
+# úspěšných požadavcích v řadě se zase zkrátí na polovinu (nejméně REQUEST_DELAY).
+MAX_DELAY = float(os.environ.get("PSP_MAX_DELAY", "30"))
+BACKOFF_RECOVER = int(os.environ.get("PSP_BACKOFF_RECOVER", "20"))
 USER_AGENT = os.environ.get(
     "PSP_USER_AGENT",
     "PSP-app (https://github.com/JanSevic/PSP-app; nocni zpracovani otevrenych dat)",

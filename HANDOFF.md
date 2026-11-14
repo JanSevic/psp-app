@@ -76,6 +76,11 @@ Stahování (14. 11. 2026, po prvních bězích na GitHubu):
   souběžných požadavcích, nejnovější první, s průběžným výpisem každých 100 stránek.
   Po vyčerpání rozpočtu se použije cache a zbytek se dotáhne při dalším běhu.
 - Chyba stažení jedné stránky build nezastaví (stránka se přeskočí, příště se zkusí znovu).
+- psp.cz po ~150 rychlých požadavcích začne odmítat spojení / neodpovídat (rate limiting).
+  `fetch` proto pauzu mezi požadavky přizpůsobuje: při odmítnutí, timeoutu nebo HTTP 429/5xx
+  ji zdvojnásobí (nejvýš `PSP_MAX_DELAY` 30 s, respektuje `Retry-After`), po
+  `PSP_BACKOFF_RECOVER` (20) úspěších v řadě ji zkrátí na polovinu. Navázání spojení má
+  timeout 20 s (`PSP_CONNECT_TIMEOUT`), čtení 90 s. Změny pauzy jsou v logu („psp.cz nestíhá …“).
 
 Zdroje (`PSP_BASE=https://www.psp.cz`):
 - `eknih/cdrom/opendata/poslanci.zip`: `osoby`, `poslanec`, `organy`, `typ_organu`, `zarazeni`

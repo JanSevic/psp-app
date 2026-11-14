@@ -1,4 +1,4 @@
-"""Stahování souborů z psp.cz s lokální cache a podmíněnými požadavky.
+"""Stahování souborů z psp.cz s lokální cache a přizpůsobivou pauzou mezi požadavky.
 
 Každý stažený soubor má vedle sebe `<soubor>.meta.json` s hlavičkami
 ETag / Last-Modified, takže při dalším běhu se nezměněné soubory nestahují.
@@ -36,14 +36,55 @@ def session() -> requests.Session:
     return s
 
 
+_delay: float | None = None  # aktuální pauza mezi požadavky (přizpůsobuje se)
+_ok_streak = 0
+
+
+def current_delay() -> float:
+    return config.REQUEST_DELAY if _delay is None else _delay
+
+
 def _throttle() -> None:
     """Pauza mezi začátky požadavků – společná pro všechna vlákna."""
     global _last_request
     with _lock:
-        wait = config.REQUEST_DELAY - (time.monotonic() - _last_request)
+        wait = current_delay() - (time.monotonic() - _last_request)
         if wait > 0:
             time.sleep(wait)
         _last_request = time.monotonic()
+
+
+def _backoff(reason: str, retry_after: float | None = None) -> None:
+    """Server odmítá nebo nestíhá – prodloužit pauzu."""
+    global _delay, _ok_streak
+    with _lock:
+        old = current_delay()
+        new = min(config.MAX_DELAY, max(old * 2, 1.0, retry_after or 0))
+        _delay, _ok_streak = new, 0
+    if new != old:
+        log.info("psp.cz nestíhá (%s) – pauza mezi požadavky %.1f s → %.1f s", reason, old, new)
+
+
+def _success() -> None:
+    """Úspěšný požadavek – po sérii úspěchů pauzu zase zkrátit."""
+    global _delay, _ok_streak
+    with _lock:
+        _ok_streak += 1
+        if _delay is None or _delay <= config.REQUEST_DELAY or _ok_streak < config.BACKOFF_RECOVER:
+            return
+        old = _delay
+        new = old / 2
+        if new <= max(config.REQUEST_DELAY * 1.5, 0.5):  # blízko výchozí hodnoty → rovnou na ni
+            new = config.REQUEST_DELAY
+        _delay, _ok_streak = new, 0
+    log.info("psp.cz odpovídá – pauza mezi požadavky %.1f s → %.1f s", old, _delay)
+
+
+def _retry_after(r) -> float | None:
+    try:
+        return float(r.headers.get("Retry-After", ""))
+    except ValueError:
+        return None
 
 
 def elapsed_minutes() -> float:
@@ -85,11 +126,15 @@ def fetch(url: str, dest: Path, *, conditional: bool = True, retries: int = 3) -
     for attempt in range(retries):
         _throttle()
         try:
-            r = session().get(url, headers=headers, timeout=config.HTTP_TIMEOUT, stream=True)
+            r = session().get(url, headers=headers, timeout=(config.CONNECT_TIMEOUT, config.HTTP_TIMEOUT), stream=True)
             if r.status_code == 304:
+                _success()
                 return dest, False
             if r.status_code == 404:
+                _success()
                 return None, False
+            if r.status_code == 429 or r.status_code >= 500:
+                _backoff(f"HTTP {r.status_code}", _retry_after(r))
             r.raise_for_status()
             tmp = dest.with_name(dest.name + ".part")
             with open(tmp, "wb") as fh:
@@ -107,11 +152,14 @@ def fetch(url: str, dest: Path, *, conditional: bool = True, retries: int = 3) -
                     }
                 )
             )
+            _success()
             return dest, changed
-        except requests.RequestException as exc:  # pragma: no cover - síťové chyby
+        except requests.RequestException as exc:
             last_exc = exc
+            if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+                _backoff(type(exc).__name__)
             log.warning("Chyba při stahování %s (pokus %d): %s", url, attempt + 1, exc)
-            time.sleep(2 * (attempt + 1))
+            time.sleep(max(2 * (attempt + 1), current_delay()))
     if dest.exists():
         log.warning("Používám starší kopii z cache: %s", dest)
         return dest, False
