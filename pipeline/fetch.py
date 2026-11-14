@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from urllib.parse import urljoin
 
 import requests
@@ -18,24 +21,43 @@ from . import config
 
 log = logging.getLogger(__name__)
 
-_session: requests.Session | None = None
+_local = threading.local()
+_lock = threading.Lock()
 _last_request = 0.0
+_T0 = time.monotonic()
 
 
 def session() -> requests.Session:
-    global _session
-    if _session is None:
-        _session = requests.Session()
-        _session.headers["User-Agent"] = config.USER_AGENT
-    return _session
+    """Jedna session na vlákno (requests.Session není bezpečná pro sdílení mezi vlákny)."""
+    s = getattr(_local, "session", None)
+    if s is None:
+        s = _local.session = requests.Session()
+        s.headers["User-Agent"] = config.USER_AGENT
+    return s
 
 
 def _throttle() -> None:
+    """Pauza mezi začátky požadavků – společná pro všechna vlákna."""
     global _last_request
-    wait = config.REQUEST_DELAY - (time.monotonic() - _last_request)
-    if wait > 0:
-        time.sleep(wait)
-    _last_request = time.monotonic()
+    with _lock:
+        wait = config.REQUEST_DELAY - (time.monotonic() - _last_request)
+        if wait > 0:
+            time.sleep(wait)
+        _last_request = time.monotonic()
+
+
+def elapsed_minutes() -> float:
+    return (time.monotonic() - _T0) / 60
+
+
+def over_budget() -> bool:
+    """Vyčerpaný časový rozpočet stahování (config.FETCH_BUDGET_MINUTES)."""
+    return elapsed_minutes() > config.FETCH_BUDGET_MINUTES
+
+
+def is_refresh_day() -> bool:
+    """Den týdenní kontroly uzavřených dat (pražský čas)."""
+    return datetime.now(ZoneInfo("Europe/Prague")).weekday() == config.REFRESH_WEEKDAY
 
 
 def _meta_path(path: Path) -> Path:

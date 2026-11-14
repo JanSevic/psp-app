@@ -55,16 +55,27 @@ Moje návrhy, které autor schválil („ano, pusť se do toho“):
 ## 2. Architektura v kostce
 
 ```
-nightly.yml: gate (půlnoc Praha) → build → deploy
-  build:
-    cache restore (cache/)                      ← stažené ZIPy, stránky, meta (ETag)
-    gh release download state                   ← state/summaries.jsonl.gz
-    python -m pipeline build                    → dist/data/**, state/work/*.jsonl.gz
-    python -m pipeline summarize                → claude -p … ; dist/data/*/sum/*.json
-    gh release upload state                     ← uloží shrnutí (i při chybě)
-    pipeline site + build-search.mjs + check-size
-    upload-pages-artifact → deploy-pages
+nightly.yml: gate (půlnoc Praha) → data → summaries → site → deploy   (každá úloha vlastní limit)
+  data:       cache restore → python -m pipeline build → cache save (vždy) → artefakt „data“
+              (dist/ + state/work/); stahování má časový rozpočet PSP_FETCH_BUDGET_MINUTES
+  summaries:  artefakt „data“ + release state → python -m pipeline summarize
+              → release state (vždy) → artefakt „summary-status“
+  site:       běží vždy, když doběhla data (i když shrnování selže / je přeskočené):
+              artefakt „data“ + release state → write-sums → site + build-search.mjs + check-size
+              → upload-pages-artifact → deploy
 ```
+
+Stahování (14. 11. 2026, po prvních bězích na GitHubu):
+- psp.cz **nepodporuje podmíněné požadavky** (vždy vrací celý soubor). Proto se o novém
+  stažení rozhoduje podle stáří: ZIPy stenoprotokolů a `hl-*.zip` uzavřených období se
+  z cache nestahují (kromě týdenní kontroly v neděli, `PSP_REFRESH_WEEKDAY`); ZIP schůze
+  aktuálního období se stahuje znovu do `PSP_ZIP_RECHECK_DAYS` (60) dní od konce schůze;
+  jednotlivé stránky do `PSP_PAGE_RECHECK_DAYS` (14) dní.
+- Z GitHubu je psp.cz pomalé (~10 s na ZIP, ~8 s na stránku stahovanou zvlášť, občas
+  „Connection refused“ / timeout). Stránky zvlášť se stahují v `PSP_FETCH_WORKERS` (2)
+  souběžných požadavcích, nejnovější první, s průběžným výpisem každých 100 stránek.
+  Po vyčerpání rozpočtu se použije cache a zbytek se dotáhne při dalším běhu.
+- Chyba stažení jedné stránky build nezastaví (stránka se přeskočí, příště se zkusí znovu).
 
 Zdroje (`PSP_BASE=https://www.psp.cz`):
 - `eknih/cdrom/opendata/poslanci.zip`: `osoby`, `poslanec`, `organy`, `typ_organu`, `zarazeni`

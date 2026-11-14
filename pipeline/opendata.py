@@ -46,8 +46,13 @@ def opendata_path(name: str) -> Path:
     return config.CACHE_DIR / "opendata" / name
 
 
-def download_opendata(name: str, required: bool = True) -> Path | None:
-    path, changed = fetch.fetch(f"{config.OPENDATA_BASE}/{name}", opendata_path(name))
+def download_opendata(name: str, required: bool = True, refresh: bool = True) -> Path | None:
+    """Stáhne soubor otevřených dat. `refresh=False`: je-li v cache, nestahuje se znovu."""
+    cached = opendata_path(name)
+    if cached.exists() and (not refresh or fetch.over_budget()):
+        log.info("%s: z cache", name)
+        return cached
+    path, changed = fetch.fetch(f"{config.OPENDATA_BASE}/{name}", cached)
     if path is None:
         if required:
             raise RuntimeError(f"Soubor otevřených dat {name} není k dispozici")

@@ -18,12 +18,15 @@ volební období, projevy od roku 2017 (8. období a novější).
 ## Jak to funguje
 
 ```
-GitHub Actions (každý den o půlnoci pražského času)
-  └─ python -m pipeline build       stáhne otevřená data psp.cz + stenoprotokoly → dist/data
-  └─ python -m pipeline summarize   doplní chybějící shrnutí přes Claude Code
-  └─ node scripts/build-search.mjs  fulltextový index (Pagefind) → dist/pagefind
-  └─ nasazení dist/ na GitHub Pages
+GitHub Actions (každý den o půlnoci pražského času), tři úlohy s vlastními limity:
+  data       python -m pipeline build       stáhne otevřená data psp.cz + stenoprotokoly → dist/data
+  summaries  python -m pipeline summarize   doplní chybějící shrnutí přes Claude Code
+  site       node scripts/build-search.mjs  fulltextový index (Pagefind) → nasazení na GitHub Pages
 ```
+
+Web se nasadí pokaždé, když doběhne úloha data, i když shrnování selže nebo se přeskočí.
+Stahování má časový rozpočet (proměnná `PSP_FETCH_BUDGET_MINUTES`, výchozí 180 minut);
+co se nestihne, dotáhne se při dalším běhu.
 
 Zdroje dat (psp.cz nemá API, používají se otevřená data):
 

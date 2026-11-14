@@ -23,7 +23,7 @@ from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import config, notes, opendata, steno
+from . import config, fetch, notes, opendata, steno
 from .opendata import Period, People
 from .unl import to_date, to_int
 
@@ -158,7 +158,10 @@ def build_period(period: Period, people: People, schuze_tab, bods, steno_meta, d
     log.info("== %s", period.label)
 
     # --- Hlasování
-    hl_zip = opendata.download_opendata(f"hl-{period.year}ps.zip", required=False)
+    closed = period.do is not None and (date.today() - period.do).days > config.ZIP_RECHECK_DAYS
+    hl_zip = opendata.download_opendata(
+        f"hl-{period.year}ps.zip", required=False, refresh=not closed or fetch.is_refresh_day()
+    )
     votes, codes_by_poslanec = (opendata.load_votes(hl_zip, period) if hl_zip else ([], {}))
     write_json(
         out / "votes.json",

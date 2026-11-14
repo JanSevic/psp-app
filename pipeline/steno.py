@@ -17,6 +17,7 @@ import difflib
 import logging
 import re
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -97,12 +98,42 @@ def collect_pages(period: Period, meta: StenoMeta) -> dict[tuple[int, int], Page
     """Stáhne (nebo z cache použije) všechny stránky stenoprotokolů období.
 
     Vrací {(schuze, turn): odkaz na stránku}; obsah se čte až při parsování.
+    Co se stahuje znovu, řídí config.ZIP_RECHECK_DAYS, PAGE_RECHECK_DAYS a
+    REFRESH_WEEKDAY; po vyčerpání config.FETCH_BUDGET_MINUTES se už nic nového
+    nestahuje a použije se, co je v cache.
     """
+    today = date.today()
+    current = period.do is None or (today - period.do).days <= config.ZIP_RECHECK_DAYS
+    refresh_day = fetch.is_refresh_day()
+    last_day: dict[int, date] = {}
+    for t in meta.turns.values():
+        if t.organ_id == period.organ_id and t.datum and (t.schuze not in last_day or t.datum > last_day[t.schuze]):
+            last_day[t.schuze] = t.datum
+
     pages: dict[tuple[int, int], PageRef] = {}
     zips = list_zip_urls(period)
-    for sch, url in sorted(zips.items()):
+    z_fetched = z_cached = z_skipped = 0
+    for i, (sch, url) in enumerate(sorted(zips.items(), reverse=True), 1):
         dest = _cache(period) / "zip" / Path(url).name
-        path, changed = fetch.fetch(url, dest)
+        if dest.exists():
+            ld = last_day.get(sch)
+            recent = current and (ld is None or (today - ld).days <= config.ZIP_RECHECK_DAYS)
+            need = (recent or refresh_day) and not fetch.over_budget()
+        else:
+            need = not fetch.over_budget()
+        path = dest if dest.exists() else None
+        if need:
+            try:
+                path, _ = fetch.fetch(url, dest)
+                z_fetched += 1
+            except RuntimeError as exc:
+                log.warning("%s", exc)
+        elif path is not None:
+            z_cached += 1
+        else:
+            z_skipped += 1
+        if i % 25 == 0:
+            log.info("Období %s: ZIPy %d / %d (staženo %d, z cache %d) · %.0f min", period.year, i, len(zips), z_fetched, z_cached, fetch.elapsed_minutes())
         if path is None:
             continue
         try:
@@ -119,31 +150,56 @@ def collect_pages(period: Period, meta: StenoMeta) -> dict[tuple[int, int], Page
             log.warning("Poškozený ZIP %s, smažu ho z cache", path)
             path.unlink(missing_ok=True)
 
-    # Stránky, které v ZIPech chybí (typicky probíhající schůze) – po jedné.
-    today = date.today()
-    missing = [
-        t for t in meta.turns.values()
-        if t.organ_id == period.organ_id and (t.schuze, t.turn) not in pages
-    ]
-    fetched = 0
-    for t in sorted(missing, key=lambda t: (t.schuze, t.turn)):
+    # Stránky, které v ZIPech chybí (typicky probíhající schůze) – po jedné, nejnovější první.
+    todo = []
+    p_cached = 0
+    for t in meta.turns.values():
+        if t.organ_id != period.organ_id or (t.schuze, t.turn) in pages:
+            continue
         dest = _cache(period) / "pages" / f"s{t.schuze:03d}{t.turn:03d}.htm"
-        recent = t.datum is None or (today - t.datum).days <= 60
+        recent = t.datum is None or (today - t.datum).days <= config.PAGE_RECHECK_DAYS
         missing_marker = dest.with_name(dest.name + ".404")
         if not recent:
             if dest.exists():
                 pages[(t.schuze, t.turn)] = ("file", dest)
+                p_cached += 1
                 continue
             if missing_marker.exists():  # neveřejné jednání apod.
                 continue
-        path, _ = fetch.fetch(page_url(period, t.schuze, t.turn), dest)
-        fetched += 1
-        if path is not None:
-            pages[(t.schuze, t.turn)] = ("file", path)
-        else:
-            missing_marker.parent.mkdir(parents=True, exist_ok=True)
-            missing_marker.write_text("")
-    log.info("Období %s: %d stránek stenoprotokolů (%d ZIPů, %d stránek zvlášť)", period.year, len(pages), len(zips), fetched)
+        todo.append((t, dest, missing_marker))
+    todo.sort(key=lambda x: (x[0].schuze, x[0].turn), reverse=True)
+
+    def get(item):
+        t, dest, marker = item
+        if fetch.over_budget():
+            return item, "budget"
+        try:
+            path, _ = fetch.fetch(page_url(period, t.schuze, t.turn), dest)
+        except RuntimeError as exc:
+            log.warning("%s", exc)
+            return item, "error"
+        if path is None:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("")
+            return item, "404"
+        return item, "ok"
+
+    counts = {"ok": 0, "404": 0, "error": 0, "budget": 0}
+    if todo:
+        log.info("Období %s: %d stránek ke stažení zvlášť (%d z cache)", period.year, len(todo), p_cached)
+    with ThreadPoolExecutor(max_workers=max(1, config.FETCH_WORKERS)) as pool:
+        for n, ((t, dest, _m), res) in enumerate(pool.map(get, todo), 1):
+            counts[res] += 1
+            if res in ("ok", "budget", "error") and dest.exists():
+                pages[(t.schuze, t.turn)] = ("file", dest)  # i starší kopie z cache
+            if n % 100 == 0 or n == len(todo):
+                log.info("Období %s: stránky zvlášť %d / %d (%s) · %.0f min", period.year, n, len(todo), counts, fetch.elapsed_minutes())
+    if counts["budget"]:
+        log.warning("Období %s: vyčerpán časový rozpočet stahování, %d stránek se dotáhne příště", period.year, counts["budget"])
+    log.info(
+        "Období %s: %d stránek stenoprotokolů (%d ZIPů: staženo %d, z cache %d, přeskočeno %d; %d stránek zvlášť: %s)",
+        period.year, len(pages), len(zips), z_fetched, z_cached, z_skipped, len(todo), counts,
+    )
     return pages
 
 

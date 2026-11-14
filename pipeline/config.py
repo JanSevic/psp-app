@@ -28,9 +28,22 @@ USER_AGENT = os.environ.get(
     "PSP-app (https://github.com/JanSevic/PSP-app; nocni zpracovani otevrenych dat)",
 )
 
-# Kolik posledních schůzí aktuálního období se každou noc kontroluje na změnu
-# stenoprotokolů (autorizace textů apod.). Ostatní se kontrolují podmíněným
-# požadavkem (If-Modified-Since), takže nezměněné soubory se nestahují.
+# Opakované stahování. psp.cz nepodporuje podmíněné požadavky (vždy vrací celý
+# soubor), proto se o novém stažení souboru z cache rozhoduje podle stáří dat:
+# - ZIPy stenoprotokolů a hlasování uzavřených období se z cache znovu nestahují,
+#   kromě týdenní kontroly (REFRESH_WEEKDAY) kvůli případným opravám;
+# - ZIP schůze aktuálního období se stahuje znovu, pokud schůze skončila před
+#   méně než ZIP_RECHECK_DAYS dny;
+# - jednotlivá stránka se stahuje znovu, pokud je mladší než PAGE_RECHECK_DAYS dní.
+ZIP_RECHECK_DAYS = int(os.environ.get("PSP_ZIP_RECHECK_DAYS", "60"))
+PAGE_RECHECK_DAYS = int(os.environ.get("PSP_PAGE_RECHECK_DAYS", "14"))
+REFRESH_WEEKDAY = int(os.environ.get("PSP_REFRESH_WEEKDAY", "6"))  # 0 = pondělí, 6 = neděle, -1 = nikdy
+# Časový rozpočet stahování: po jeho vyčerpání se už nestahuje nic nového, zpracuje se
+# to, co je v cache, a zbytek se dotáhne při dalším běhu.
+FETCH_BUDGET_MINUTES = float(os.environ.get("PSP_FETCH_BUDGET_MINUTES", "180"))
+# Souběžné požadavky při stahování jednotlivých stránek
+FETCH_WORKERS = int(os.environ.get("PSP_FETCH_WORKERS", "2"))
+
 SITE_SIZE_LIMIT_MB = int(os.environ.get("SITE_SIZE_LIMIT_MB", "950"))
 
 # Shrnutí
